@@ -31,7 +31,7 @@ int word_group(char *w) {
 }
 
 int pack_word(char *w) {
-  return ((w[0]-'A') << 10) | ((w[1]-'A') << 5) | (w[2]-'A');
+  return (w[0]-'A') | ((w[1]-'A') << 5) | ((w[2]-'A') << 10);
 }
 
 int main() {
