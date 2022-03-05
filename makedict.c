@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #define WORDS_PER_LINE 8
-#define GROUPS_PER_LINE 7
+#define GROUPS_PER_LINE 4
 
 char *next_word(FILE *f) {
   static char word[6] = {0};
@@ -27,7 +27,7 @@ void next_group(char *g) {
 }
 
 int word_group(char *w) {
-  return ((w[0]-'A') << 8) | (w[1]-'A');
+  return (w[0]-'A')*26+(w[1]-'A');
 }
 
 int pack_word(char *w) {
@@ -47,11 +47,7 @@ int main() {
     return -1;
   }
 
-  int table[65536] = {0};
-  for(int i = 0; i < 65536; i++) {
-    table[i] = -1;
-  }
-  
+  int table[26*26] = {0};
   int num_words = 0;
   int words_on_line = 0;
   
@@ -65,8 +61,8 @@ int main() {
     
     fprintf(dict_asm, "$%04x", pack_word(w+2));
 
-    if(table[word_group(w)] == -1) {
-      table[word_group(w)] = num_words * 3;
+    if(word_group(w) != 0 && table[word_group(w)] == 0) {
+      table[word_group(w)] = num_words*3;
     }
     
     num_words++;
@@ -84,18 +80,13 @@ int main() {
   int groups_on_line = 0;
   fprintf(dict_asm, "table:\n");
 
-  char g[2] = "AA";
-  for(int groups=0; groups < 26*26; next_group(g),groups++) {
+  for(int groups=0; groups < 26*26; groups++) {
     if(groups_on_line == 0) {
       fprintf(dict_asm, "   .word ");
     } else if(groups_on_line != GROUPS_PER_LINE) {
       fprintf(dict_asm, ",");
     }
-    int offset = 0;
-    if(table[word_group(g)] != -1) {
-      offset = table[word_group(g)];
-    }
-    fprintf(dict_asm, "$%04x", offset);
+    fprintf(dict_asm, "dict+$%04x", table[groups]);
     groups_on_line++;
     if(groups_on_line == GROUPS_PER_LINE) {
       fprintf(dict_asm, "\n");
