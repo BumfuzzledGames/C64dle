@@ -12,27 +12,52 @@ hello:
    .text "HELLO, WORLD!"
    .byte 0
 
-buffer:
-   .byte 0,0,0
+word:       
+   .byte 0,0,0,0,0
    
 start:
-   lda dict+2
-   sta unpack_wordlet_wordlet
-   lda dict+3
-   sta unpack_wordlet_wordlet+1
-   lda #<buffer
-   sta unpack_wordlet_result
-   lda #>buffer
-   sta unpack_wordlet_result+1
-   jsr unpack_wordlet
+   lda #10
+   sta $fd                    //loop counter
 
+   lda #<dict                 //get pointer to dict
+   sta $fb
+   lda #>dict
+   sta $fc
+
+   lda #<word+2               //get pointer to wordlet result
+   sta unpack_wordlet_result
+   lda #>word+2
+   sta unpack_wordlet_result+1
+
+@start_loop:      
    ldy #0
-!: lda buffer,y
+!: lda ($fb),y                //get wordlet
+   sta unpack_wordlet_wordlet,y
+   iny
+   cpy #3
+   bne !-
+   
+   jsr unpack_wordlet         //unpack the wordlet
+   ldy #0                     //print the wordlet
+!: lda word+2,y
    jsr $ffd2
    iny
    cpy #3
    bne !-
-   rts
+   lda #$0d
+   jsr $ffd2
+
+   clc            	          //add 2 to dict pointer
+   lda $fb
+   adc #2
+   sta $fb
+   lda $fc
+   adc #0
+   sta $fc
+
+   dec $fd
+   bne @start_loop   
+   rts                        //cannot reach
 
 
 /* unpacks a wordlet
