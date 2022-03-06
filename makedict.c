@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <ctype.h>
 #define WORDS_PER_LINE 8
-#define GROUPS_PER_LINE 8
 
 char *next_word(FILE *f) {
   static char word[6] = {0};
@@ -21,7 +20,7 @@ char *next_word(FILE *f) {
 void next_group(char *g) {
   g[1]++;
   if(g[1] > 'Z') {
-    g[1] = 'A';zzzzzzzzzzzz
+    g[1] = 'A';
     g[0]++;
   }
 }
@@ -61,8 +60,9 @@ int main() {
     
     fprintf(dict_asm, "$%04x", pack_word(w+2));
 
-    if(word_group(w) != 0 && table[word_group(w)] == 0) {
-      table[word_group(w)] = num_words*3;
+    table[word_group(w)]++;
+    if(table[word_group(w)] > 255) {
+      fprintf(stderr, "ERROR!!! The group for %s has too many elements: %d\n", w, table[word_group(w)]);
     }
     
     num_words++;
@@ -77,20 +77,15 @@ int main() {
   }
   fprintf(dict_asm, "\n");
 
-  int groups_on_line = 0;
   fprintf(dict_asm, "table:\n");
 
-  for(int groups=0; groups < 26*26; groups++) {
-    if(groups_on_line == 0) {
-      fprintf(dict_asm, "   .word ");
-    } else if(groups_on_line != GROUPS_PER_LINE) {
-      fprintf(dict_asm, ",");
-    }
-    fprintf(dict_asm, "$%04x", table[groups]);
-    groups_on_line++;
-    if(groups_on_line == GROUPS_PER_LINE) {
-      fprintf(dict_asm, "\n");
-      groups_on_line = 0;
+  char group[2] = "AA";
+  for(int i = 0; i < 26*26; i++) {
+    fprintf(dict_asm, "table_%s: .byte %d\n", group, table[word_group(group)]);
+    group[1]++;
+    if(group[1] > 'Z') {
+      group[1] = 'A';
+      group[0]++;
     }
   }
   fprintf(dict_asm, "\n");

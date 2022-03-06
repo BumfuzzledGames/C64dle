@@ -23,7 +23,7 @@ BasicUpstart2(start)
 }
 
 word:       
-   .byte 0,0,0,0,0
+   .byte 0,0,0,0,0,0
 
 sentry:     .text "XXX"
 buffer:     .fill 8,0
@@ -36,6 +36,85 @@ numeric:    .text "0123456789"
 .const numeric_len = *-numeric
 .const alphanumeric_len = *-alpha
 
+
+start: {
+   m16 #word:print.string
+   m16 #word+2:unpack_wordlet.result
+   lda #'A'                   //start with AA prefix
+   sta word
+   sta word+1
+   m16 #table:table_ptr
+   m16 #dict:dict_ptr
+
+print_group:
+loop:       
+   ldx table_ptr:$ffff
+   beq next_group
+next_word:
+   ldy #0
+!: lda dict_ptr:$ffff,y       //copy wordlet from dictionary
+   sta unpack_wordlet.wordlet,y
+   iny
+   cpy #2
+   bne !-
+   clc
+   lda dict_ptr               // advance dict_ptr
+   adc #2
+   sta dict_ptr
+   lda dict_ptr+1
+   adc #0
+   sta dict_ptr+1
+   txa                        //save x
+   pha
+   jsr unpack_wordlet
+   jsr print
+   ldx #3
+   lda #' '
+!: jsr KERNAL_CHROUT
+   dex
+   bne !-
+   pla                        //restore x
+   tax
+   dex                        //next word
+   bne next_word
+next_group:
+   //inc table_ptr              //next group pointer
+   lda table_ptr
+   clc
+   adc #1
+   sta table_ptr
+   bcc !+
+   inc table_ptr+1
+!: clc                        //next prefix
+   lda word+1
+   adc #1
+   sta word+1
+   cmp #'Z'+1
+   bcc loop                   //single letter change
+   lda #'A'
+   sta word+1
+   inc word
+   lda word
+   cmp #'Z'+1
+   bcc loop
+done:
+   rts
+}   
+   
+   
+
+
+print: {
+   ldx #0
+!: lda string:$ffff,x
+   beq !+
+   jsr printer:KERNAL_CHROUT
+   inx
+   jmp !-
+!: rts
+}                      
+            
+/*
 start:
    :mov #alphanumeric_len:read_string.check_string_len
    :m16 #alpha:read_string.check_string
@@ -53,6 +132,7 @@ start:
    inx
    jmp !-
 !: rts
+*/
 
 /*   
 start:
@@ -105,25 +185,27 @@ start:
      unpack_wordlet_wordlet = wordlet
      unpack_wordlet_result = address of result
 */
-unpack_wordlet:
+unpack_wordlet: {
    ldy #0
 @loop:
-   lda unpack_wordlet_wordlet
+   lda wordlet
    and #%00011111             //get lower 5 bits
    clc
    adc #'A'                   //and add 'A'
-   sta unpack_wordlet_result:$ffff,y
+   sta result:$ffff,y
    ldx #5                     //shift by 5 bits
 !: clc
-   ror unpack_wordlet_wordlet+1
-   ror unpack_wordlet_wordlet
+   ror wordlet+1
+   ror wordlet
    dex
    bne !-
    iny
    cpy #3
    bne @loop
    rts
-unpack_wordlet_wordlet:           .byte 0,0
+wordlet:
+   .word 0
+}
 #import "dict.asm"
 
 
