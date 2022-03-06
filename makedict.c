@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #define WORDS_PER_LINE 8
-#define GROUPS_PER_LINE 4
+#define GROUPS_PER_LINE 8
 
 char *next_word(FILE *f) {
   static char word[6] = {0};
@@ -21,7 +21,7 @@ char *next_word(FILE *f) {
 void next_group(char *g) {
   g[1]++;
   if(g[1] > 'Z') {
-    g[1] = 'A';
+    g[1] = 'A';zzzzzzzzzzzz
     g[0]++;
   }
 }
@@ -86,7 +86,7 @@ int main() {
     } else if(groups_on_line != GROUPS_PER_LINE) {
       fprintf(dict_asm, ",");
     }
-    fprintf(dict_asm, "dict+$%04x", table[groups]);
+    fprintf(dict_asm, "$%04x", table[groups]);
     groups_on_line++;
     if(groups_on_line == GROUPS_PER_LINE) {
       fprintf(dict_asm, "\n");

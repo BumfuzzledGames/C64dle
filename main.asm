@@ -7,14 +7,54 @@
  */
 
 BasicUpstart2(start)
+#import "kernal.inc"
 
-hello:
-   .text "HELLO, WORLD!"
-   .byte 0
+.pseudocommand mov a1:a2 { lda a1; sta a2 }
+.pseudocommand m16 src:tar {
+  lda src
+  sta tar
+  lda _16bit_nextArgument(src)
+  sta _16bit_nextArgument(tar)
+}
+
+.function _16bit_nextArgument(arg) {
+  .if (arg.getType()==AT_IMMEDIATE) .return CmdArgument(arg.getType(),>arg.getValue())
+  .return CmdArgument(arg.getType(),arg.getValue()+1)
+}
 
 word:       
    .byte 0,0,0,0,0
-   
+
+sentry:     .text "XXX"
+buffer:     .fill 8,0
+.const buffer_len = *-buffer
+
+alpha:      .text "abcdefghijklmnopqrstuvwxyz"
+            .text "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+.const alpha_len = *-alpha
+numeric:    .text "0123456789"
+.const numeric_len = *-numeric
+.const alphanumeric_len = *-alpha
+
+start:
+   :mov #alphanumeric_len:read_string.check_string_len
+   :m16 #alpha:read_string.check_string
+   :mov #read_string.check_mode_check:read_string.check_mode
+   :mov #buffer_len-1:read_string.max_string_len
+   :m16 #buffer:read_string.buffer
+   jsr read_string
+   lda #$0d
+   jsr KERNAL_CHROUT
+   ldx #0
+!: lda sentry,x               
+   cmp #0
+   beq !+
+   jsr KERNAL_CHROUT
+   inx
+   jmp !-
+!: rts
+
+/*   
 start:
    lda #10
    sta $fd                    //loop counter
@@ -58,7 +98,7 @@ start:
    dec $fd
    bne @start_loop   
    rts                        //cannot reach
-
+*/
 
 /* unpacks a wordlet
    parameters:
@@ -85,3 +125,73 @@ unpack_wordlet:
    rts
 unpack_wordlet_wordlet:           .byte 0,0
 #import "dict.asm"
+
+
+read_string: {
+   ldx #0                     //initialize idx
+
+loop:
+   txa                        //preserve x (no phx? really?)
+   pha
+!: jsr getin:KERNAL_GETIN
+   beq !-
+   tay                        //restore x, don't mangle a
+   pla
+   tax
+   tya
+
+   cmp #$0d                   //done when return is pressed
+   bne !+
+   lda #0                     //store a nul
+   jsr force_store
+   rts
+
+!: cmp #$14                   //handle delete specially
+   bne !+
+   cpx #0                     //do nothing if at begin
+   beq loop
+   jsr echo
+   dex                        //move tail back and store nul
+   lda #0
+   jsr store
+   dex                        //move tail back again
+   jmp loop
+
+!: jmp check_mode:check_mode_no_check
+check_mode_check:
+   ldy #0                     //idx into check string
+!: cpy check_string_len:#$ff
+   beq loop                   //end of check string, bail
+   cmp check_string:$ffff,y
+   beq check_ok
+   iny
+   jmp !-
+check_mode_no_check:        
+check_ok:
+   jsr store
+   cpy #0                     //did it store?
+   beq !+
+   jsr echo
+!: jmp loop
+
+store:                        //returns success in y
+   ldy #0
+   cpx max_string_len:#$ff    //end of buffer?
+   beq !+
+force_store:
+   sta buffer:$ffff,x         //store character
+   inx
+   ldy #1                     //success
+!: rts                        
+
+echo:
+   cmp #$14                   //pass delete through
+   beq force_echo
+   jmp echo_mode:echo_mode_read_char
+echo_mode_fixed_char:         
+   lda echo_char:#'*'
+echo_mode_read_char:          
+force_echo:      
+   jsr chrout:KERNAL_CHROUT
+   rts
+}
