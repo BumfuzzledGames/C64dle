@@ -54,6 +54,7 @@ int main(int argc, char *argv[]) {
   fputc(0, output);
   fputc(0, output);
 
+  // Words
   for(char *word = next_word(input); word != NULL; word = next_word(input)) {
     uint32_t packed_word = pack_word(word);
     fputc((packed_word & 0xFF000000) >> 24, output);
@@ -61,8 +62,9 @@ int main(int argc, char *argv[]) {
     fputc((packed_word & 0x0000FF00) >> 8, output);
     fputc((packed_word & 0x000000FF), output);
   }
+  // Terminator
   for(int i = 0; i < 4; i++) {
-    fputc(0, output);
+    fputc(0xFF, output);
   }
   
   return 0;
