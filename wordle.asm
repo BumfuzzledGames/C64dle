@@ -38,6 +38,10 @@ str_numeric:
 .const str_numeric_len = *-str_numeric
 .const str_alpha_numeric_len = *-str_alpha
 
+str_end_word:
+   .text "AAAAA"
+.const str_end_word_len = *-str_end_word
+
 str_loading:
    .text "LOADING "      
 str_dictionary_filename:
@@ -46,9 +50,26 @@ str_dictionary_filename:
 str_done:
    .text "DONE"
    .byte $0d, 0
+str_not_same:
+   .text "NOT "
+str_same:
+   .text "SAME"
+   .byte 0
 
 
 start: {
+       /*
+   m16 #str_end_word:string_compare.stra
+   m16 #str_end_word:string_compare.strb
+   mov #5:string_compare.length
+   m16 #str_same:print.string
+   jsr string_compare
+   beq !+
+   m16 #str_not_same:print.string
+!: jsr print
+   rts
+*/
+
    sei                        //disable BASIC ROM
    lda $1
    and #%11111110
@@ -96,13 +117,23 @@ start: {
    cpx #5
    bne !--
     */
-   
-   jsr next_word
-   jsr next_word
+
+   m16 #str_end_word:string_compare.stra
+   m16 #word:string_compare.strb
+   mov #5:string_compare.length
+
+!: jsr next_word
+   jsr string_compare
+   beq !+
    m16 #word:print.string
    jsr print
+   lda #' '
+   jsr KERNAL_CHROUT
+   jsr KERNAL_CHROUT
+   jsr KERNAL_CHROUT
+   jmp !-
    
-   sei                        //enable BASIC ROM
+!: sei                        //enable BASIC ROM
    lda $1
    ora #%00000001
    sta $1
@@ -112,14 +143,28 @@ done:
    rts
 }
 
+
+string_compare: {
+   ldx #0
+!: lda stra:$ffff,x
+   cmp strb:$ffff,x
+   bne !+
+   inx
+   cpx length:#0
+   bne !-
+!: rts
+}             
+
 next_word: {
    ldy #0                     //5 letters
-!: tya
+next_letter:   
+   tya
    pha                        //store x
-!: ldy #5                     //shift 5 bits
+   ldy #5                     //shift 5 bits
    clc
    lda #0
-!: ldx #3                     //through 4 characters
+next_bit:      
+   ldx #3                     //through 4 characters
    jmp !++                    //don't restore carry first time
 !: plp                        //restore carry bit
 !: rol _dict:dict,x
@@ -130,7 +175,7 @@ next_word: {
    plp                        //pop carry
    rol                        //into accumulator
    dey
-   bne !---
+   bne next_bit
    adc #'A'
    tax
    pla                        //restore outer loop counter
@@ -139,7 +184,7 @@ next_word: {
    sta _word:word,y
    iny
    cpy #5
-   bne !-----
+   bne next_letter
    clc                        //advance to next word
    lda _dict
    adc #4
