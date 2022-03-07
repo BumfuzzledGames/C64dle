@@ -1,94 +1,64 @@
 // Process dict.txt into dict.asm
 #include <stdio.h>
 #include <ctype.h>
-#define WORDS_PER_LINE 8
+#include <stdint.h>
+#include <stdlib.h>
 
+// Read the next word from file, returns static buffer
 char *next_word(FILE *f) {
   static char word[6] = {0};
-  int chars;
 
-  if(fscanf(f, "%5s%n\n", word, &chars) != 1 || chars != 5) {
+  int chars_read;
+  fscanf(f, "%5s%n\n", word, &chars_read);
+  if(chars_read != 5) {
     return NULL;
-  } else {
-    for(int i = 0; i < 5; i++) {
-      word[i] = toupper(word[i]);
+  }
+  for(int i = 0; i < 5; i++) {
+    if(!isupper(word[i])) {
+      return NULL;
     }
-    return word;
   }
-}
-
-void next_group(char *g) {
-  g[1]++;
-  if(g[1] > 'Z') {
-    g[1] = 'A';
-    g[0]++;
-  }
-}
-
-int word_group(char *w) {
-  return (w[0]-'A')*26+(w[1]-'A');
-}
-
-int pack_word(char *w) {
-  return (w[0]-'A') | ((w[1]-'A') << 5) | ((w[2]-'A') << 10);
-}
-
-int main() {
-  FILE *input = fopen("dict.txt", "r");
-  if(input == NULL) {
-    fprintf(stderr, "Could not open dict.txt\n");
-    return -1;
-  }
-
-  FILE *dict_asm = fopen("dict.asm", "w+");
-  if(dict_asm == NULL) {
-    fprintf(stderr, "Could not open dict.asm for writing\n");
-    return -1;
-  }
-
-  int table[26*26] = {0};
-  int num_words = 0;
-  int words_on_line = 0;
   
-  fprintf(dict_asm, "dict:\n");
-  for(char *w = next_word(input); w; w = next_word(input)) {
-    if(words_on_line == 0) {
-      fprintf(dict_asm, "   .word ");
-    } else {
-      fprintf(dict_asm, ",");
-    }
-    
-    fprintf(dict_asm, "$%04x", pack_word(w+2));
+  return word;
+}
 
-    table[word_group(w)]++;
-    if(table[word_group(w)] > 255) {
-      fprintf(stderr, "ERROR!!! The group for %s has too many elements: %d\n", w, table[word_group(w)]);
-    }
-    
-    num_words++;
-    words_on_line++;
-    if(words_on_line == WORDS_PER_LINE) {
-      fprintf(dict_asm, "\n");
-      words_on_line = 0;
-    }
+// Pack word with uint32_t using 5-bit encoding
+uint32_t pack_word(char *w) {
+  return (w[0]-'A') << 27 |
+    (w[1]-'A') << 22 |
+    (w[2]-'A') << 17 |
+    (w[3]-'A') << 12 |
+    (w[4]-'A') << 7;
+}
+
+// Open a file or die trying
+FILE *open_file(const char *filename, const char *mode) {
+  FILE *f = fopen(filename, mode);
+  if(f == NULL) {
+    fprintf(stderr, "Error: Could not open %s\n", filename);
+    exit(EXIT_FAILURE);
   }
-  if(words_on_line != WORDS_PER_LINE) {
-    fprintf(dict_asm, "\n");
+  return f;
+}
+
+int main(int argc, char *argv[]) {
+  if(argc != 3) {
+    fprintf(stderr, "Usage: %s dict.txt dict.bin\n", argv[0]);
+    return EXIT_FAILURE;
   }
-  fprintf(dict_asm, "\n");
+  FILE *input = open_file(argv[1], "rb");
+  FILE *output = open_file(argv[2], "wb+");
 
-  fprintf(dict_asm, "table:\n");
-
-  char group[2] = "AA";
-  for(int i = 0; i < 26*26; i++) {
-    fprintf(dict_asm, "table_%s: .byte %d\n", group, table[word_group(group)]);
-    group[1]++;
-    if(group[1] > 'Z') {
-      group[1] = 'A';
-      group[0]++;
-    }
+  for(char *word = next_word(input); word != NULL; word = next_word(input)) {
+    uint32_t packed_word = pack_word(word);
+    fputc((packed_word & 0xFF000000) >> 24, output);
+    fputc((packed_word & 0x00FF0000) >> 16, output);
+    fputc((packed_word & 0x0000FF00) >> 8, output);
+    fputc((packed_word & 0x000000FF), output);
   }
-  fprintf(dict_asm, "\n");
-
+  for(int i = 0; i < 4; i++) {
+    fputc(0, output);
+  }
+  
   return 0;
 }

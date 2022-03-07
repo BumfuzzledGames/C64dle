@@ -25,79 +25,66 @@ BasicUpstart2(start)
 word:       
    .byte 0,0,0,0,0,0
 
-sentry:     .text "XXX"
 buffer:     .fill 8,0
 .const buffer_len = *-buffer
 
-alpha:      .text "abcdefghijklmnopqrstuvwxyz"
-            .text "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-.const alpha_len = *-alpha
-numeric:    .text "0123456789"
-.const numeric_len = *-numeric
-.const alphanumeric_len = *-alpha
+str_alpha:
+str_alpha_numeric:            
+   .text "abcdefghijklmnopqrstuvwxyz"
+   .text "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+.const str_alpha_len = *-str_alpha
+str_numeric:
+   .text "0123456789"
+.const str_numeric_len = *-str_numeric
+.const str_alpha_numeric_len = *-str_alpha
+
+str_loading:
+   .text "LOADING "      
+str_dictionary_filename:
+   .text "DICTIONARY...  "
+   .byte 0
+str_done:
+   .text "DONE"
+   .byte 0
 
 
 start: {
-   m16 #word:print.string
-   m16 #word+2:unpack_wordlet.result
-   lda #'A'                   //start with AA prefix
-   sta word
-   sta word+1
-   m16 #table:table_ptr
-   m16 #dict:dict_ptr
-
-print_group:
-loop:       
-   ldx table_ptr:$ffff
-   beq next_group
-next_word:
-   ldy #0
-!: lda dict_ptr:$ffff,y       //copy wordlet from dictionary
-   sta unpack_wordlet.wordlet,y
-   iny
-   cpy #2
-   bne !-
-   clc
-   lda dict_ptr               // advance dict_ptr
-   adc #2
-   sta dict_ptr
-   lda dict_ptr+1
-   adc #0
-   sta dict_ptr+1
-   txa                        //save x
-   pha
-   jsr unpack_wordlet
+   sei                        //disable BASIC ROM
+   lda $1
+   and #%11111110
+   sta $1
+   cli
+   
+   m16 #str_loading:print.string
    jsr print
-   ldx #3
-   lda #' '
-!: jsr KERNAL_CHROUT
-   dex
-   bne !-
-   pla                        //restore x
-   tax
-   dex                        //next word
-   bne next_word
-next_group:
-   //inc table_ptr              //next group pointer
-   lda table_ptr
-   clc
-   adc #1
-   sta table_ptr
-   bcc !+
-   inc table_ptr+1
-!: clc                        //next prefix
-   lda word+1
-   adc #1
-   sta word+1
-   cmp #'Z'+1
-   bcc loop                   //single letter change
-   lda #'A'
-   sta word+1
-   inc word
-   lda word
-   cmp #'Z'+1
-   bcc loop
-done:
+
+   lda #10                    //SETNAM DICTIONARY
+   ldx #<str_dictionary_filename
+   ldy #>str_dictionary_filename
+   jsr KERNAL_SETNAM
+   lda #1                     //SETLFS
+   ldx $ba                    //last device used
+   bne !+
+   ldx #8                     //default to drive 8
+!: ldy #0                     //load to new address
+   jsr KERNAL_SETLFS
+   ldx #<dict                 //LOAD
+   ldy #>dict
+   lda #0
+   jsr KERNAL_LOAD
+   bcs done
+
+   m16 #str_done:print.string
+.break
+   jsr print
+   
+   sei                        //enable BASIC ROM
+   lda $1
+   ora #%00000001
+   sta $1
+   cli
+
+done:      
    rts
 }   
    
@@ -206,7 +193,6 @@ unpack_wordlet: {
 wordlet:
    .word 0
 }
-#import "dict.asm"
 
 
 read_string: {
@@ -277,3 +263,5 @@ force_echo:
    jsr chrout:KERNAL_CHROUT
    rts
 }
+
+dict:                           //dict is at end of program
