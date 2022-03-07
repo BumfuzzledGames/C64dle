@@ -77,6 +77,7 @@ start: {
    m16 #str_done:print.string
    jsr print
 
+   /*
    ldx #0                     //decode 5 letters
 
 !: lda #0
@@ -94,7 +95,10 @@ start: {
    inx
    cpx #5
    bne !--
+    */
    
+   jsr next_word
+   jsr next_word
    m16 #word:print.string
    jsr print
    
@@ -106,7 +110,44 @@ start: {
 
 done:      
    rts
-}   
+}
+
+next_word: {
+   ldy #0                     //5 letters
+!: tya
+   pha                        //store x
+!: ldy #5                     //shift 5 bits
+   clc
+   lda #0
+!: ldx #3                     //through 4 characters
+   jmp !++                    //don't restore carry first time
+!: plp                        //restore carry bit
+!: rol _dict:dict,x
+   php                        //save carry bit
+   dex
+   cpx #$ff
+   bne !--
+   plp                        //pop carry
+   rol                        //into accumulator
+   dey
+   bne !---
+   adc #'A'
+   tax
+   pla                        //restore outer loop counter
+   tay
+   txa
+   sta _word:word,y
+   iny
+   cpy #5
+   bne !-----
+   clc                        //advance to next word
+   lda _dict
+   adc #4
+   sta _dict
+   bcc !+
+   inc _dict+1
+!: rts
+}              
    
    
 
