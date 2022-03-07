@@ -27,12 +27,8 @@ word:
 encoded_word:
    .byte 0,0,0,0
 
-buffer:     .fill 8,0
+buffer:     .fill 6,0
 .const buffer_len = *-buffer
-
-str_alpha:
-   .text "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-.const str_alpha_len = *-str_alpha
 
 start: {
    sei                        //disable BASIC ROM
@@ -41,19 +37,15 @@ start: {
    sta $1
    cli
 
-   jsr load_dictionary
-   bcs done
+   //jsr load_dictionary
+   //bcs done
 
-!: jsr next_word
-   bcs done
-   m16 #word:print._string
+   mov #5:read_string._buffer_len
+   m16 #buffer:read_string._buffer
+   jsr read_string
+   m16 #buffer:print._string
    jsr print
-   lda #' '
-   jsr KERNAL_CHROUT
-   jsr KERNAL_CHROUT
-   jsr KERNAL_CHROUT
-   jmp !-
-   
+
 done:      
 !: sei                        //enable BASIC ROM
    lda $1
@@ -186,7 +178,9 @@ loop:
    tax
    tya
 
-   cmp #$0d                   //done when return is pressed
+   cmp #$0d                   //done when return is pressed ...
+   bne !+
+   cpx _buffer_len            //and at end of buffer
    bne !+
    lda #0                     //store a nul
    jsr force_store
@@ -203,12 +197,12 @@ loop:
    dex                        //move tail back again
    jmp loop
 
-!: jmp check_mode:check_mode_no_check
+!: jmp _check_mode:check_mode_check
 check_mode_check:
    ldy #0                     //idx into check string
-!: cpy check_string_len:#$ff
+!: cpy _check_string_len:#26
    beq loop                   //end of check string, bail
-   cmp check_string:$ffff,y
+   cmp _check_string:alpha,y
    beq check_ok
    iny
    jmp !-
@@ -222,10 +216,10 @@ check_ok:
 
 store:                        //returns success in y
    ldy #0
-   cpx max_string_len:#$ff    //end of buffer?
+   cpx _buffer_len:#$ff       //end of buffer?
    beq !+
 force_store:
-   sta buffer:$ffff,x         //store character
+   sta _buffer:$ffff,x        //store character
    inx
    ldy #1                     //success
 !: rts                        
@@ -240,6 +234,10 @@ echo_mode_read_char:
 force_echo:      
    jsr chrout:KERNAL_CHROUT
    rts
+alpha:
+   .text "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 }
+
+
 
 dict:                           //dict is at end of program
