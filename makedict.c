@@ -24,11 +24,12 @@ char *next_word(FILE *f) {
 
 // Pack word with uint32_t using 5-bit encoding
 uint32_t pack_word(char *w) {
-  return (w[0]-'A') << 27 |
-    (w[1]-'A') << 22 |
-    (w[2]-'A') << 17 |
-    (w[3]-'A') << 12 |
-    (w[4]-'A') << 7;
+  return
+    ((w[0]-'A')&0x1F) << 27 |
+    ((w[1]-'A')&0x1F) << 22 |
+    ((w[2]-'A')&0x1F) << 17 |
+    ((w[3]-'A')&0x1F) << 12 |
+    ((w[4]-'A')&0x1F) << 7;
 }
 
 // Open a file or die trying
@@ -48,6 +49,10 @@ int main(int argc, char *argv[]) {
   }
   FILE *input = open_file(argv[1], "rb");
   FILE *output = open_file(argv[2], "wb+");
+
+  // Dummy PRG header
+  fputc(0, output);
+  fputc(0, output);
 
   for(char *word = next_word(input); word != NULL; word = next_word(input)) {
     uint32_t packed_word = pack_word(word);

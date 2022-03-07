@@ -45,7 +45,7 @@ str_dictionary_filename:
    .byte 0
 str_done:
    .text "DONE"
-   .byte 0
+   .byte $0d, 0
 
 
 start: {
@@ -75,7 +75,27 @@ start: {
    bcs done
 
    m16 #str_done:print.string
-.break
+   jsr print
+
+   ldx #0                     //decode 5 letters
+
+!: lda #0
+   ldy #5                     //gimme 5 bits
+!: rol dict+3
+   rol dict+2
+   rol dict+1
+   rol dict
+   rol
+   dey
+   bne !-
+   clc
+   adc #'A'
+   sta word,x
+   inx
+   cpx #5
+   bne !--
+   
+   m16 #word:print.string
    jsr print
    
    sei                        //enable BASIC ROM
