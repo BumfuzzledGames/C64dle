@@ -10,8 +10,11 @@ all: wordle.prg
 makedict: makedict.c
 	$(CC) $(CFLAGS) $< -o $@
 
-dict.prg: makedict 10000_5_letter_words_no_newlines.txt
-	./makedict 10000_5_letter_words_no_newlines.txt dict.prg
+wordlist.txt: 5_letter_words_by_frequency.txt
+	head -10000 5_letter_words_by_frequency.txt | tr -d \\n | tr [:lower:] [:upper:] >wordlist.txt 
+
+dict.prg: makedict wordlist.txt
+	./makedict wordlist.txt dict.prg
 
 wordle.prg: wordle.asm dict.prg
 	$(KICKASS) -vicesymbols -debugdump wordle.asm wordle.prg
@@ -22,7 +25,7 @@ wordle.d64: wordle.prg
 
 .phony: clean
 clean:
-	rm -f dict.bin wordle.prg dict.prg wordle.d64
+	rm -f dict.bin wordle.prg dict.prg wordle.d64 wordlist.txt
 
 .phony: run
 run: wordle.d64

@@ -57,16 +57,26 @@ loop:
    lda #$0d                   //print newline
    jsr KERNAL_CHROUT
 
-   m16 #dict:next_word._dict  //reset dict pointer
-   m16 #buffer:string_compare.stra
-   m16 #word:string_compare.strb
-   mov #5:string_compare.length
-next:
-   jsr next_word
-   bcs word_invalid
-   jsr string_compare
-   beq word_valid
-   jmp next
+   jsr encode_word            //encode the word
+   m16 #dict:dict_ptr         //reset to beginning of list
+           .break
+next_word:                    
+   ldx #3                     //4 bytes per word
+!: lda dict_ptr:dict,x        //get quarterword
+   cmp #$ff                   //stop code?
+   beq word_invalid
+   cmp encode_word.output,x
+   bne !+                     //no match
+   dex
+   bpl !-
+   jmp word_valid             //match
+!: lda dict_ptr
+   clc
+   adc #4
+   sta dict_ptr
+   bcc !+
+   inc dict_ptr+1
+!: jmp next_word              //next word
 
 word_valid:
    mov #valid:print._string
@@ -78,7 +88,7 @@ print_result:
    jsr print
 
 done:      
-!: sei                        //enable BASIC ROM
+   sei                        //enable BASIC ROM
    lda $1
    ora #%00000001
    sta $1
@@ -140,7 +150,35 @@ endword:
    rts
 scratch:
    .byte 0,0,0,0
-}              
+}
+
+encode_word: {
+   ldx #3                     //clear output
+   lda #0
+!: sta output,x
+   dex
+   bpl !-
+   
+   ldx #4                     //5 letters
+!: lda _word:buffer,x
+   sec
+   sbc #'A'                   //PETSCII to baudot
+   ldy #5                     //5 bits
+!: clc
+   ror                        //get bit from accumulator
+   ror output                 //and roll through output
+   ror output+1
+   ror output+2
+   ror output+3
+   dey
+   bne !-
+   dex
+   bpl !--
+   rts
+
+output:
+   .byte 0,0,0,0
+}
 
             
 // Print zero-terminated print:_string using print:_printer
