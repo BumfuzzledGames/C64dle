@@ -37,14 +37,22 @@ start: {
    sta $1
    cli
 
-   //jsr load_dictionary
-   //bcs done
-
+   /*
    mov #5:read_string._buffer_len
    m16 #buffer:read_string._buffer
    jsr read_string
    m16 #buffer:print._string
    jsr print
+*/
+
+   m16 #word:print._string
+loop:
+   jsr next_word
+   bcs done
+   jsr print
+   lda #' '
+   jsr KERNAL_CHROUT;   jsr KERNAL_CHROUT;   jsr KERNAL_CHROUT
+   jmp loop
 
 done:      
 !: sei                        //enable BASIC ROM
@@ -55,47 +63,6 @@ done:
 
    rts
 }
-
-
-load_dictionary: {
-   m16 #str_loading:print._string
-   jsr print
-   lda #10                    //SETNAM DICTIONARY
-   ldx #<str_dictionary_filename
-   ldy #>str_dictionary_filename
-   jsr KERNAL_SETNAM
-   lda #1                     //SETLFS
-   ldx $ba                    //last used device
-   bne !+
-   lda #8                     //default drive 8
-!: ldy #0                     //load to new address
-   jsr KERNAL_SETLFS
-   ldx #<dict                 //LOAD
-   ldy #>dict
-   lda #0
-   jsr KERNAL_LOAD
-   bcs error
-   m16 #str_done:print._string
-   jsr print
-   clc
-   rts
-error:
-   m16 #str_error:print._string
-   jsr print
-   sec
-   rts
-str_loading:
-   .text "LOADING "
-str_dictionary_filename:
-   .text "DICTIONARY...   "
-   .byte 0
-str_done:
-   .text "DONE"
-   .byte $0d, 0
-str_error:
-   .text "ERROR"
-   .byte $0d, 0
-}            
 
 
 string_compare: {
@@ -241,3 +208,4 @@ alpha:
 
 
 dict:                           //dict is at end of program
+.import c64 "dict.prg"
