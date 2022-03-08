@@ -26,6 +26,16 @@ word:
    .byte 0,0,0,0,0,0
 encoded_word:
    .byte 0,0,0,0
+prompt:
+   .text "ENTER A 5 LETTER WORD: "
+   .byte 0
+
+invalid:
+   .text "IN"
+valid:
+   .text "VALID"
+   .byte $0d,0
+
 
 buffer:     .fill 6,0
 .const buffer_len = *-buffer
@@ -37,22 +47,35 @@ start: {
    sta $1
    cli
 
-   /*
+loop:      
+   m16 #prompt:print._string  //print prompt
+   jsr print
+   //read string
    mov #5:read_string._buffer_len
    m16 #buffer:read_string._buffer
    jsr read_string
-   m16 #buffer:print._string
-   jsr print
-*/
+   lda #$0d                   //print newline
+   jsr KERNAL_CHROUT
 
-   m16 #word:print._string
-loop:
+   m16 #dict:next_word._dict  //reset dict pointer
+   m16 #buffer:string_compare.stra
+   m16 #word:string_compare.strb
+   mov #5:string_compare.length
+next:
    jsr next_word
-   bcs done
+   bcs word_invalid
+   jsr string_compare
+   beq word_valid
+   jmp next
+
+word_valid:
+   mov #valid:print._string
+   jmp print_result
+
+word_invalid:
+   mov #invalid:print._string
+print_result:
    jsr print
-   lda #' '
-   jsr KERNAL_CHROUT;   jsr KERNAL_CHROUT;   jsr KERNAL_CHROUT
-   jmp loop
 
 done:      
 !: sei                        //enable BASIC ROM
