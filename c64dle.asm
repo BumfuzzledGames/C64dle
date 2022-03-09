@@ -39,6 +39,34 @@ start: {
    lda #6                     //da ba dee da ba di
    sta 53280
 
+   jsr srand
+   ldx #250
+!: jsr rand
+   sta 1024+000,x
+   jsr rand
+   sta 1024+250,x
+   jsr rand
+   sta 1024+500,x
+   jsr rand
+   sta 1024+750,x
+   dex
+   bne !-
+   jmp *
+
+/*
+!: lda $d418                  //choose a random word
+   sta $fb
+!: cmp $d418                  //wait for a new number
+   beq !-
+   lda $d418
+   sta $fc
+   cmp #>DICT_SIZE            //check for too large
+   bne !--
+   lda $fb
+   cmp #<DICT_SIZE
+   bne !--
+*/
+
 loop:      
    PRINT(prompt)
    mov #5:read_string._buffer_len
@@ -90,7 +118,51 @@ print: {
 .macro PRINT(string) {
    m16 #string:print._string
    jsr print
-}                             
+}
+
+
+/* rand  Generates a random number
+   Parameters
+     _seed_hi
+       High byte, set to seed PRNG and read for result
+     _seed_lo
+       Low byte, set to seed PRNG and read for result
+   Returns  random number in A
+   Mangles  A
+   Notes
+     Do not set the seed to 0 in both _hi and _lo,
+     otherwise it will generate 0 over and over again.
+ */
+rand: {
+   lda _seed_hi:#$12
+   lsr
+   rol _seed_lo
+   bcc !+
+   eor #$b4
+!: sta _seed_hi
+   eor _seed_lo:#34
+   rts
+}
+
+/* srand  Seeds the rand using the SID noise channel
+   Parameters  none
+   Returns  nothing
+   Mangles  A
+*/
+srand: {
+   lda #$ff                   //set up SID
+   sta $d40e
+   sta $d40f
+   lda #$80
+   sta $d412
+   lda $d418                  //get random number
+   sta rand._seed_hi
+!: cmp $d418                  //wait for new random number
+   beq !-
+   lda $d418                  //get random number
+   sta rand._seed_lo
+}
+                    
 
 
 /* is_valid  Checks if a word is valid
@@ -241,7 +313,7 @@ check_mode_check:
    beq check_ok
    jmp !-
 check_mode_no_check:        
-check_ok:
+ncheck_ok:
    jsr store
    jsr _echo_mode:echo_mode_read_char
 !: jmp loop
@@ -266,3 +338,6 @@ alpha:
 
 dict:                           //dict is at end of program
 .import binary "dict.bin"
+dict_end:   
+.const DICT_NUM_WORDS=(dict_end-dict)/4-1
+            
