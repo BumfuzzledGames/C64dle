@@ -25,7 +25,8 @@ valid:
    .byte $0d,0
 
 
-buffer:     .fill 6,0
+buffer:
+   .fill 6,0
 .const buffer_len = *-buffer
 
 start: {
@@ -35,12 +36,11 @@ start: {
    sta $1
    cli
 
-   lda #6                     //BLUE DAMN IT
+   lda #6                     //da ba dee da ba di
    sta 53280
 
 loop:      
-   m16 #prompt:print._string  //print prompt
-   jsr print
+   PRINT(prompt)
    mov #5:read_string._buffer_len
    m16 #buffer:read_string._buffer
    jsr read_string
@@ -50,34 +50,11 @@ loop:
    dex
    bpl !-
 
-   jsr encode_word            //encode the word
-   m16 #dict:dict_ptr         //reset to beginning of list
-next_word:                    
-   ldx #3                     //4 bytes per word
-!: lda dict_ptr:dict,x        //get quarterword
-   cmp #$ff                   //stop code?
-   beq word_invalid
-   cmp encode_word.output,x
-   bne !+                     //no match
-   dex
-   bpl !-
-   jmp word_valid             //match
-!: lda dict_ptr
-   clc
-   adc #4
-   sta dict_ptr
-   bcc !+
-   inc dict_ptr+1
-!: jmp next_word              //next word
-
-word_valid:
-   mov #valid:print._string
-   jmp print_result
-
-word_invalid:
-   mov #invalid:print._string
-print_result:
-   jsr print
+   m16 #invalid:print._string
+   jsr is_valid
+   bcs !+
+   m16 #valid:print._string
+!: jsr print
    jmp loop
 
 done:      
@@ -91,90 +68,16 @@ done:
 }
 
 
-string_compare: {
-   ldx #0
-!: lda stra:$ffff,x
-   cmp strb:$ffff,x
-   bne !+
-   inx
-   cpx length:#0
-   bne !-
-!: rts
-}             
-
-            
-// Decode next word into next_word:_word
-next_word: {
-   ldx #3                     //copy word into scratch
-!: lda _dict:dict,x
-   sta scratch,x
-   dex
-   bpl !-
-
-   ldy #0                     //letter counter
-next_letter:
-   ldx #5                     //5 bits
-   lda #0
-next_bit:
-   rol scratch+3
-   rol scratch+2
-   rol scratch+1
-   rol scratch
-   rol
-   dex
-   bne next_bit
-   cmp #%00011111             //terminator? I hardly know 'er!
-   beq endword
-   adc #'A'                   //baudot to PETSCII
-   sta _word:word,y           //store letter
-   iny
-   cpy #5                     //produce 5 letters
-   bne next_letter
-   clc                        //advance to next word
-   lda _dict
-   adc #4
-   sta _dict
-   bcc !+
-   inc _dict+1
-!: clc
-   rts
-endword:
-   sec
-   rts
-scratch:
-   .byte 0,0,0,0
-}
-
-encode_word: {
-   ldx #3                     //clear output
-   lda #0
-!: sta output,x
-   dex
-   bpl !-
-   
-   ldx #4                     //5 letters
-!: lda _word:buffer,x
-   sec
-   sbc #'A'                   //PETSCII to baudot
-   ldy #5                     //5 bits
-!: clc
-   ror                        //get bit from accumulator
-   ror output                 //and roll through output
-   ror output+1
-   ror output+2
-   ror output+3
-   dey
-   bne !-
-   dex
-   bpl !--
-   rts
-
-output:
-   .byte 0,0,0,0
-}
-
-            
-// Print zero-terminated print:_string using print:_printer
+/* print  Prints a nul-terminated string
+   Parameters
+      _string
+        Address of string to print
+      _printer
+        Routine to print a character. Defaults
+        to KERNAL_CHROUT
+   Returns  nothing
+   Mangles A,X
+*/
 print: {
    ldx #0
 !: lda _string:$ffff,x
@@ -183,77 +86,181 @@ print: {
    inx
    jmp !-
 !: rts
-}                      
+}
+.macro PRINT(string) {
+   m16 #string:print._string
+   jsr print
+}                             
 
 
-// Read a string using _getin
+/* is_valid  Checks if a word is valid
+   Parameters
+     _input
+       Address of input word. Defaults to buffer.
+   Returns
+     C=0  Word is valid
+     C=1  Word is invalid
+   Mangles A,X
+   Notes
+     This is the most critical routine in the game.
+     Since it must search through a ~10,000 word
+     dictionary, entries will take too long if this
+     routine is slow.
+*/
+is_valid: {
+{
+   //clear top byte of encoded word
+   lda #0
+   sta encoded_word
+   //encode word
+   ldx #4                     //5 letters
+letter_loop:                  
+   lda _input:buffer,x
+   sec
+   sbc #'A'                   //PETSCII to baudot
+   ldy #5                     //5 bits
+bit_loop:                     
+   clc
+   ror                        //roll through encoded_word
+   ror encoded_word
+   ror encoded_word+1
+   ror encoded_word+2
+   ror encoded_word+3
+   dey
+   bne bit_loop
+   dex
+   bpl letter_loop
+}
+{                             
+   //search dictionary for word
+   m16 #dict:dict_ptr         //reset to beginning of dictionary
+word_loop:
+   ldx #3                     //4 bytes per word
+byte_loop: 
+   lda dict_ptr:$ffff,x       //get quarterword
+   //TODO: If I change the stop code to $00, I can eliminate
+   //this instruction
+   cmp #$ff                   //stop code?
+   bne !+
+   sec                        //return invalid
+   rts
+!: cmp encoded_word,x         //compare with input word
+   bne next_word              //no match
+   dex                        //next byte
+   bpl byte_loop
+   clc                        //all 4 bytes matched
+   rts                        //return valid
+next_word:    
+   lda dict_ptr               //advance dict_ptr
+   clc
+   adc #4
+   sta dict_ptr
+   bcc word_loop
+   inc dict_ptr+1
+   jmp word_loop
+}                             
+encoded_word: 
+   .byte 0,0,0,0
+}
+
+
+/* read_string  Read a string
+   Parameters
+     _buffer (required)
+        Address of buffer to store string
+     _buffer_len (required)
+        Will store at most _buffer_len bytes _not_
+        including nul byte
+     _getin
+        Address of routine to get a character
+        Defaults to KERNAL_GETIN
+     _chrout
+        Address of routine to print a character
+        Defaults to KERNAL_CHROUT
+     _check_mode
+        Possible values are
+        check_mode_check or check_mode_no_check
+        Defaults to check_mode_check
+     _check_string
+        Address of string of acceptable characters
+        Defaults to alpha
+     _check_string_len
+        Length of _check_string
+     _full_buffer_mode
+        Possible values are full_buffer_mode_yes or
+        full_buffer_mode_no. If yes, only strings
+        filling the buffer will be accepted.
+     _echo_mode
+        Possible values are echo_mode_fixed_char or
+        echo_mode_read_char. Defaults to
+        echo_mode_read_char
+     _echo_char
+        Char to echo in fixed char mode. Defaults
+        to '*'
+   Returns
+     X  number of bytes read, including nul
+   Mangles A,X,Y
+   Notes
+     This routine is intended to be as flexible as
+     possible.
+*/
 read_string: {
    ldx #0                     //initialize idx
 loop:
-   txa                        //preserve x (no phx? really?)
-   pha
+   stx $fb                    //preserve x
 !: jsr _getin:KERNAL_GETIN
    beq !-
-   tay                        //restore x, don't mangle a
-   pla
-   tax
-   tya
-
+   ldx $fb                    //restore x
+is_return:       
    cmp #$0d                   //done when return is pressed ...
-   bne !+
-   cpx _buffer_len            //and at end of buffer
-   bne !+
+   bne is_delete
+   jmp _full_buffer_mode:full_buffer_mode_yes
+full_buffer_mode_yes:         
+   cpx _buffer_len            //don't return unless at end
+   bne loop                   //of buffer
+full_buffer_mode_no:          
    lda #0                     //store a nul
-   jsr force_store
-   rts
-
-!: cmp #$14                   //handle delete specially
-   bne !+
-   cpx #0                     //do nothing if at begin
+   jmp force_store            //also returns
+is_delete:
+   cmp #$14                   //handle delete specially
+   bne is_full
+   cpx #0                     //do nothing if at beginning
    beq loop
-   jsr echo
+   jsr echo_mode_read_char    //no fixed echo for delete
    dex                        //move tail back and store nul
    lda #0
    jsr store
    dex                        //move tail back again
    jmp loop
-
-!: jmp _check_mode:check_mode_check
+is_full:         
+   cpx _buffer_len            //is the buffer full?
+   beq loop
+check:           
+   jmp _check_mode:check_mode_check
 check_mode_check:
-   ldy #0                     //idx into check string
-!: cpy _check_string_len:#26
-   beq loop                   //end of check string, bail
+   ldy _check_string_len:#26  //idx into check string
+!: dey
+   bmi loop                   //end of check string, invalid
    cmp _check_string:alpha,y
    beq check_ok
-   iny
    jmp !-
 check_mode_no_check:        
 check_ok:
    jsr store
-   cpy #0                     //did it store?
-   beq !+
-   jsr echo
+   jsr _echo_mode:echo_mode_read_char
 !: jmp loop
-
-store:                        //returns success in y
-   ldy #0
+store:     
    cpx _buffer_len:#$ff       //end of buffer?
    beq !+
 force_store:
    sta _buffer:$ffff,x        //store character
    inx
-   ldy #1                     //success
 !: rts                        
-
 echo:
-   cmp #$14                   //pass delete through
-   beq force_echo
-   jmp echo_mode:echo_mode_read_char
 echo_mode_fixed_char:         
-   lda echo_char:#'*'
+   lda _echo_char:#'*'
 echo_mode_read_char:          
-force_echo:      
-   jsr chrout:KERNAL_CHROUT
+   jsr _chrout:KERNAL_CHROUT
    rts
 alpha:
    .text "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
