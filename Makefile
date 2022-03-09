@@ -31,6 +31,6 @@ clean:
 run: c64dle.prg
 	$(X64) -autostartprgmode 1 c64dle.prg
 
-.phony: debugf
+.phony: debug
 debug: c64dle.prg
 	$(C64DBG) c64dle.prg
