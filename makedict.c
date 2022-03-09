@@ -8,13 +8,12 @@
 char *next_word(FILE *f) {
   static char word[6] = {0};
 
-  int chars_read;
-  fscanf(f, "%5s%n\n", word, &chars_read);
-  if(chars_read != 5) {
+  if(fread(word, 1, 5, f) != 5) {
     return NULL;
   }
   for(int i = 0; i < 5; i++) {
     if(!isupper(word[i])) {
+      fprintf(stderr, "Invalid word found\n");
       return NULL;
     }
   }
@@ -49,10 +48,6 @@ int main(int argc, char *argv[]) {
   }
   FILE *input = open_file(argv[1], "rb");
   FILE *output = open_file(argv[2], "wb+");
-
-  // Dummy PRG header
-  fputc(0, output);
-  fputc(0, output);
 
   // Words
   for(char *word = next_word(input); word != NULL; word = next_word(input)) {

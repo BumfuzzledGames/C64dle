@@ -5,32 +5,32 @@ X64     ?= x64sc
 C64DBG  ?= c64debugger
 C1541   ?= c1541
 
-all: wordle.prg
+all: c64dle.prg
 
 makedict: makedict.c
 	$(CC) $(CFLAGS) $< -o $@
 
-wordlist.txt: 5_letter_words_by_frequency.txt
-	head -10000 5_letter_words_by_frequency.txt | tr -d \\n | tr [:lower:] [:upper:] >wordlist.txt 
+dictns.txt: dict.txt
+	head -10000 dict.txt | tr [:lower:] [:upper:] | tr -dc [:upper:] >dictns.txt
 
-dict.prg: makedict wordlist.txt
-	./makedict wordlist.txt dict.prg
+dict.bin: makedict dictns.txt
+	./makedict dictns.txt dict.bin
 
-wordle.prg: wordle.asm dict.prg
-	$(KICKASS) -vicesymbols -debugdump wordle.asm wordle.prg
+c64dle.prg: c64dle.asm dict.bin
+	$(KICKASS) -vicesymbols -debugdump c64dle.asm c64dle.prg
 
-wordle.d64: wordle.prg
-	$(C1541) -format wordle,0 d64 wordle.d64
-	$(C1541) -attach wordle.d64 -write wordle.prg wordle
+c64dle.d64: c64dle.prg
+	$(C1541) -format c64dle,0 d64 c64dle.d64
+	$(C1541) -attach c64dle.d64 -write c64dle.prg c64dle
 
 .phony: clean
 clean:
-	rm -f dict.bin wordle.prg dict.prg wordle.d64 wordlist.txt
+	rm -f dict.bin c64dle.prg dict.prg c64dle.d64 dictns.txt
 
 .phony: run
 run: wordle.d64
-	$(X64) -autostartprgmode 1 wordle.prg
+	$(X64) -autostartprgmode 1 c64dle.prg
 
 .phony: debug
 debug: wordle.d64
-	$(C64DBG) wordle.prg
+	$(C64DBG) c64dle.prg
