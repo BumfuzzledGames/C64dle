@@ -108,18 +108,14 @@ print: {
      routine is slow.
 */
 is_valid: {
-{
-   //clear top byte of encoded word
-   lda #0
-   sta encoded_word
-   //encode word
+{  //encode word
    ldx #4                     //5 letters
-letter_loop:                  
+letter:                  
    lda _input:buffer,x
    sec
-   sbc #'A'                   //PETSCII to baudot
+   sbc #'A'-2                 //PETSCII to 5-bit code
    ldy #5                     //5 bits
-bit_loop:                     
+bit:                     
    clc
    ror                        //roll through encoded_word
    ror encoded_word
@@ -127,21 +123,21 @@ bit_loop:
    ror encoded_word+2
    ror encoded_word+3
    dey
-   bne bit_loop
+   bne bit
    dex
-   bpl letter_loop
+   bpl letter
+   lda encoded_word+3         //fix lower bits
+   and #%10000000
+   ora #%00000001
+   sta encoded_word+3
 }
-{                             
-   //search dictionary for word
+{  //search dictionary for word
    m16 #dict:dict_ptr         //reset to beginning of dictionary
 word_loop:
    ldx #3                     //4 bytes per word
 byte_loop: 
    lda dict_ptr:$ffff,x       //get quarterword
-   //TODO: If I change the stop code to $00, I can eliminate
-   //this instruction
-   cmp #$ff                   //stop code?
-   bne !+
+   bne !+                     //stop code?
    sec                        //return invalid
    rts
 !: cmp encoded_word,x         //compare with input word

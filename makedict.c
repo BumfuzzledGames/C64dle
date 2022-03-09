@@ -24,11 +24,12 @@ char *next_word(FILE *f) {
 // Pack word with uint32_t using 5-bit encoding
 uint32_t pack_word(char *w) {
   return
-    ((w[0]-'A')&0x1F) << 27 |
-    ((w[1]-'A')&0x1F) << 22 |
-    ((w[2]-'A')&0x1F) << 17 |
-    ((w[3]-'A')&0x1F) << 12 |
-    ((w[4]-'A')&0x1F) << 7;
+    ((w[0]-'A'+2)&0x1F) << 27 |
+    ((w[1]-'A'+2)&0x1F) << 22 |
+    ((w[2]-'A'+2)&0x1F) << 17 |
+    ((w[3]-'A'+2)&0x1F) << 12 |
+    ((w[4]-'A'+2)&0x1F) << 7 |
+    1;  // Prevent nul byte
 }
 
 // Open a file or die trying
@@ -59,7 +60,7 @@ int main(int argc, char *argv[]) {
   }
   // Terminator
   for(int i = 0; i < 4; i++) {
-    fputc(0xFF, output);
+    fputc(0x00, output);
   }
   
   return 0;
