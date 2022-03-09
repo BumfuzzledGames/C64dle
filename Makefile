@@ -28,9 +28,9 @@ clean:
 	rm -f dict.bin c64dle.prg dict.prg c64dle.d64 dictns.txt
 
 .phony: run
-run: wordle.d64
+run: c64dle.prg
 	$(X64) -autostartprgmode 1 c64dle.prg
 
 .phony: debug
-debug: wordle.d64
+debug: c64dle.prg
 	$(C64DBG) c64dle.prg

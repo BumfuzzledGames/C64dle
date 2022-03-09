@@ -262,4 +262,4 @@ alpha:
 
 
 dict:                           //dict is at end of program
-.import binary "dict.prg"
+.import binary "dict.bin"
