@@ -10,12 +10,18 @@ BasicUpstart2(start)
 #import "kernal.inc"
 #import "macros.inc"
 
-word:       
-   .byte 0,0,0,0,0,0
+word:
+   .fill 6,0
 encoded_word:
-   .byte 0,0,0,0
+   //.fill 4,0
+   .byte $10, $e1, $6a, $81
+secret_word:
+   .fill 6,0
 prompt:
    .text "ENTER A 5 LETTER WORD: "
+   .byte 0
+wait_prompt:                  
+   .text "PRESS ENTER TO GENERATE A WORD: "
    .byte 0
 
 invalid:
@@ -39,48 +45,65 @@ start: {
    lda #6                     //da ba dee da ba di
    sta 53280
 
-   jsr srand
-   
+loop:      
+   lda #$ff                   //get the sid noise channel running
+   sta $d40e
+   sta $d40f
+   lda #$80
+   sta $d412
+   PRINT(wait_prompt)         //wait for user
+!: jsr KERNAL_GETIN
+   cmp #$0d
+   bne !-
+   lda $d41b                  //get random number
+   sta rand.x                 //seed PRNG
+
    mov #<1000:rand16_max._max_lo
    mov #>1000:rand16_max._max_hi
    m16 #rand16_max._max_mode_max:rand16_max._max_mode
-   mov #$03:rand16_max._mask_hi
-   ldx #0
-!: jsr rand16_max
-   lda #<1024
-   clc
-   adc rand16_max._output
-   sta screenpos
-   lda #>1024
-   clc
-   adc rand16_max._output+1
-   sta screenpos+1
-   stx screenpos:1024
-   inx
-   jmp !-
+   jsr rand16_max
    
+   clc
+   rol rand16_max._output
+   rol rand16_max._output+1
+   
+   clc
+   rol rand16_max._output
+   rol rand16_max._output+1
 
-!: jsr rand
-   tax
-   jsr rand
-   sta 1024,x
-   jmp !-
+   clc
+   lda rand16_max._output
+   adc #<dict
+   sta dict_ptr
+   lda rand16_max._output+1
+   adc #>dict
+   sta dict_ptr+1
+
+   ldx #3
+!: lda dict_ptr:dict,x
+   sta decode_word._input,x
+   dex
+   bpl !-
+   m16 #word:decode_word._output
+   jsr decode_word
+
+   ldx #4
+   PRINT(word)
+   lda #$0d
+   jsr KERNAL_CHROUT
+!: jsr KERNAL_GETIN
+   cmp #$0d
+   bne !-
+   jmp loop
 
 
-/*
-!: lda $d418                  //choose a random word
-   sta $fb
-!: cmp $d418                  //wait for a new number
-   beq !-
-   lda $d418
-   sta $fc
-   cmp #>DICT_SIZE            //check for too large
-   bne !--
-   lda $fb
-   cmp #<DICT_SIZE
-   bne !--
-*/
 
+
+
+
+
+
+/*           
 loop:      
    PRINT(prompt)
    mov #5:read_string._buffer_len
@@ -98,6 +121,7 @@ loop:
    m16 #valid:print._string
 !: jsr print
    jmp loop
+*/
 
 done:      
    sei                        //enable BASIC ROM
@@ -132,6 +156,41 @@ print: {
 .macro PRINT(string) {
    m16 #string:print._string
    jsr print
+}
+
+
+/* decode_word  Decodes a word from encoded 4-byte to string
+   Parameters
+     _input
+       4-byte encoded word
+     _output
+       Address it should store decoded word
+   Returns  nothing
+   Mangles  A,X,Y
+ */
+decode_word: {
+   ldx #0                     //5 letters
+letter:
+   lda #0
+   ldy #5                     //5 bits
+bit:             
+   clc                        //shift through all 4 bytes into A
+   rol _input+3
+   rol _input+2
+   rol _input+1
+   rol _input
+   rol
+   dey
+   bne bit                    //5 shifts in total
+   clc
+   adc #'A'-2                 //Convert back to PETSCII
+   sta _output:$ffff,x
+   inx
+   cpx #5
+   bne letter
+   rts
+_input:
+   .fill 4,0
 }
 
 
@@ -209,7 +268,7 @@ subtract:
 _output:
    .word 0
 }
-            
+        
 
 /* srand  Seeds the rand using the SID noise channel
    Parameters  none
@@ -222,7 +281,10 @@ srand: {
    sta $d40f
    lda #$80
    sta $d412
-   lda $d418                  //get random number
+   lda $d41b                  //get random number
+!: cmp $d41b
+   beq !-
+   lda $d41b
    sta rand.x
    rts
 }
