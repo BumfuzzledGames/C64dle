@@ -26,7 +26,7 @@ valid:
 
 
 buffer:
-   .fill 6,0
+    .fill 6,0
 .const buffer_len = *-buffer
 
 start: {
@@ -40,18 +40,32 @@ start: {
    sta 53280
 
    jsr srand
-   ldx #250
+   
+   mov #<1000:rand16_max._max_lo
+   mov #>1000:rand16_max._max_hi
+   m16 #rand16_max._max_mode_max:rand16_max._max_mode
+   mov #$03:rand16_max._mask_hi
+   ldx #0
+!: jsr rand16_max
+   lda #<1024
+   clc
+   adc rand16_max._output
+   sta screenpos
+   lda #>1024
+   clc
+   adc rand16_max._output+1
+   sta screenpos+1
+   stx screenpos:1024
+   inx
+   jmp !-
+   
+
 !: jsr rand
-   sta 1024+000,x
+   tax
    jsr rand
-   sta 1024+250,x
-   jsr rand
-   sta 1024+500,x
-   jsr rand
-   sta 1024+750,x
-   dex
-   bne !-
-   jmp *
+   sta 1024,x
+   jmp !-
+
 
 /*
 !: lda $d418                  //choose a random word
@@ -121,28 +135,81 @@ print: {
 }
 
 
-/* rand  Generates a random number
-   Parameters
-     _seed_hi
-       High byte, set to seed PRNG and read for result
-     _seed_lo
-       Low byte, set to seed PRNG and read for result
+/* rand  Generates a random byte
+   Parameters  nothing
    Returns  random number in A
    Mangles  A
    Notes
-     Do not set the seed to 0 in both _hi and _lo,
-     otherwise it will generate 0 over and over again.
+     Seed with srand
+     If needed, a second random byte can be read from b
  */
 rand: {
-   lda _seed_hi:#$12
+   inc x
+   clc
+   lda x:#$00
+   eor c:#$c2
+   eor a:#$11
+   sta a
+   adc b:#$37
+   sta b
    lsr
-   rol _seed_lo
-   bcc !+
-   eor #$b4
-!: sta _seed_hi
-   eor _seed_lo:#34
+   eor a
+   adc c
+   sta c
    rts
+}                
+            
+/* rand16_max  Generates a 16-bit random number
+   Parameters
+     _max
+       Generated number must be < _max
+     _mask_lo and _mask_hi
+       Generated number is ANDed with mask to aid subtraction
+     _max_mode
+       Set to _max_mode_max to check against a maximum value,
+       or _max_mode_no_max to skip that check.
+   Returns  random number in _output
+   Mangles  A
+   Note
+     You can use this routine generally in one of two ways:  Set
+     _mask_hi and _mask_lo to get random bits in specific positions,
+     or leave them at $ffff and set _max_hi and _max_lo to get a
+     random number no higher than a maximum. Be sure to set _max_mode
+     if you wish to check against a maximum number.
+ */
+rand16_max: {
+   jsr rand                   //generate 16-bit number
+   and _mask_lo:#$ff
+   sta _output
+   lda rand.b
+   and _mask_hi:#$ff
+   sta _output+1
+   jmp _max_mode:_max_mode_no_max
+_max_mode_max:            
+loop:
+   lda _output+1              //subtract _max from _output
+   cmp _max_hi:#$ff           //while _output > _max
+   beq !+
+   bcs subtract
+   rts
+!: lda _output
+   cmp _max_lo:#$ff
+   bcs subtract
+_max_mode_no_max:         
+   rts
+subtract:
+   lda _output                //subtract _max from _output
+   sec
+   sbc _max_lo
+   sta _output
+   lda _output+1
+   sbc _max_hi
+   sta _output+1
+   jmp loop
+_output:
+   .word 0
 }
+            
 
 /* srand  Seeds the rand using the SID noise channel
    Parameters  none
@@ -156,11 +223,8 @@ srand: {
    lda #$80
    sta $d412
    lda $d418                  //get random number
-   sta rand._seed_hi
-!: cmp $d418                  //wait for new random number
-   beq !-
-   lda $d418                  //get random number
-   sta rand._seed_lo
+   sta rand.x
+   rts
 }
                     
 
@@ -313,7 +377,7 @@ check_mode_check:
    beq check_ok
    jmp !-
 check_mode_no_check:        
-ncheck_ok:
+check_ok:
    jsr store
    jsr _echo_mode:echo_mode_read_char
 !: jmp loop
