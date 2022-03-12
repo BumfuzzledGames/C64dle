@@ -9,17 +9,27 @@
 BasicUpstart2(start)
 #import "kernal.inc"
 #import "macros.inc"
+#import "color.inc"
 
-word:
+.const COLOR=COLOR_WHITE
+.const MATCH_EXACT=COLOR_GREEN
+.const MATCH_INEXACT=COLOR_WHITE
+.const MATCH_NONE=COLOR_GREY
+
+guessed_word:
    .fill 6,0
-encoded_word:
-   //.fill 4,0
-   .byte $10, $e1, $6a, $81
+guessed_matches:          
+   .fill 5,0
+secret_word:    
+   .fill 6,0
+secret_word_matches:
+   .fill 5,0
+
 prompt:
    .text "ENTER A 5 LETTER WORD: "
    .byte 0
 wait_prompt:                  
-   .text "PRESS ENTER TO START GENERATING WORDS... "
+   .text "PRESS ENTER TO START GAME... "
    .byte 0
 
 invalid:
@@ -43,7 +53,7 @@ start: {
    lda #6                     //da ba dee da ba di
    sta 53280
 
-   lda #5
+   lda #COLOR_WHITE
    jsr KERNAL_CHROUT
 
    lda #$ff                   //get the sid noise channel running
@@ -59,15 +69,8 @@ start: {
    lda $d41b                  //get random number
    sta rand.x                 //seed PRNG
 
-   m16 #word:decode_word._output
-   
 loop:
-   jsr random_word
-   PRINT(word)
-   lda #' '
-   jsr KERNAL_CHROUT
-   jsr KERNAL_CHROUT
-   jsr KERNAL_CHROUT
+   jsr play_game
    jmp loop
 
 
@@ -99,6 +102,136 @@ done:
    cli
 
    rts
+}
+
+
+play_game:{
+   m16 #secret_word:decode_word._output
+   jsr random_word            //pick secret word
+
+   //PRINT(secret_word)         //print for debug
+   lda #$0d
+   jsr KERNAL_CHROUT
+
+main_loop:         
+   PRINT(prompt)              //get word from user
+   mov #0:read_string._idx
+   mov #5:read_string._buffer_len
+   m16 #guessed_word:read_string._buffer
+              
+get_guess: {         
+   jsr read_string
+
+   //check if word is valid
+   PRINT(str_checking)
+   m16 #guessed_word:is_valid._input
+   jsr is_valid
+   php
+   PRINT(str_checking_erase)
+   plp
+   bcc clear_matches
+   //TODO Make a sound or something
+   mov #5:read_string._idx
+   jmp get_guess
+str_checking:
+   .text " ..."
+   .byte 0
+str_checking_erase:
+   .fill *-str_checking-1,$14
+   .byte 0
+}
+
+clear_matches: {
+   ldx #4
+loop:              
+   lda #MATCH_NONE
+   sta guessed_matches,x
+   lda #0
+   sta secret_word_matches,x
+   dex
+   bpl loop
+}
+   
+find_exact_matches: {
+   ldx #4                     //idx
+   ldy #0                     //match counter
+loop:                   
+   lda guessed_word,x
+   cmp secret_word,x
+   bne !+
+   lda #MATCH_EXACT
+   sta guessed_matches,x
+   lda #1
+   sta secret_word_matches,x
+   iny
+!: dex
+   bpl loop
+}
+   
+did_player_win: {
+   cpy #5
+   bne find_inexact_matches
+   PRINT(str_won)
+   rts
+str_won:
+   .byte $0d
+   .text "YOU GOT IT!!!!"
+   .byte $0d, $00
+}
+   
+find_inexact_matches: {
+   ldx #4                     //idx into guessed_word
+loop:               
+   lda guessed_matches,x
+   cmp #MATCH_EXACT           //skip already matched letters
+   beq next_guess_letter
+   ldy #4                     //idx into secret_word
+secret_loop:        
+   lda secret_word_matches,y  //skip already matched letters
+   bne next_secret_letter
+   lda guessed_word,x
+   cmp secret_word,y
+   bne next_secret_letter
+   lda #MATCH_INEXACT         //found an inexact match
+   sta guessed_matches,x
+   lda #1
+   sta secret_word_matches,y
+   jmp next_guess_letter
+next_secret_letter: 
+   dey
+   bpl secret_loop
+next_guess_letter:        
+   dex
+   bpl loop
+}
+   
+erase_word: {
+   ldx #5
+   lda #$14
+!: jsr KERNAL_CHROUT
+   dex
+   bne !-
+}
+   
+   //print word with colors
+print_color_guess: {
+   ldx #0
+!: lda guessed_matches,x
+   jsr KERNAL_CHROUT
+   lda guessed_word,x
+   jsr KERNAL_CHROUT
+   inx
+   cpx #5
+   bne !-
+   lda #COLOR
+   jsr KERNAL_CHROUT
+}
+   
+   //loop
+   lda #$0d
+   jsr KERNAL_CHROUT
+   mov #0:read_string._idx
+   jmp main_loop
 }
 
 
@@ -321,7 +454,7 @@ srand: {
      routine is slow.
 */
 is_valid: {
-{  //encode word
+   //encode word
    ldx #4                     //5 letters
 letter:                  
    lda _input:buffer,x
@@ -343,8 +476,7 @@ bit:
    and #%10000000
    ora #%00000001
    sta encoded_word+3
-}
-{  //search dictionary for word
+   //search dictionary for word
    m16 #dict:dict_ptr         //reset to beginning of dictionary
 word_loop:
    ldx #3                     //4 bytes per word
@@ -366,8 +498,7 @@ next_word:
    sta dict_ptr
    bcc word_loop
    inc dict_ptr+1
-   jmp word_loop
-}                             
+   jmp word_loop                             
 encoded_word: 
    .byte 0,0,0,0
 }
@@ -375,6 +506,9 @@ encoded_word:
 
 /* read_string  Read a string
    Parameters
+     _idx
+        Initial idx into buffer, used to re-start
+        reading a string.
      _buffer (required)
         Address of buffer to store string
      _buffer_len (required)
@@ -414,7 +548,7 @@ encoded_word:
      possible.
 */
 read_string: {
-   ldx #0                     //initialize idx
+   ldx _idx:#0                //initialize idx
 loop:
    stx $fb                    //preserve x
 !: jsr _getin:KERNAL_GETIN
