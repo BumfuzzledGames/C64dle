@@ -10,8 +10,10 @@ all: c64dle.prg
 makedict: makedict.c
 	$(CC) $(CFLAGS) $< -o $@
 
-dictns.txt: dict.txt
-	head -10000 dict.txt | tr [:lower:] [:upper:] | tr -dc [:upper:] >dictns.txt
+dictns.txt: frequency.txt scrabble.txt
+	grep -Fx -f scrabble.txt frequency.txt | \
+		head -10000 | \
+		tr -dc [:upper:] >dictns.txt
 
 dict.bin: makedict dictns.txt
 	./makedict dictns.txt dict.bin

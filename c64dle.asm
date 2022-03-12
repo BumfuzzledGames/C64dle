@@ -96,13 +96,6 @@ loop:
    bne !-
    jmp loop
 
-
-
-
-
-
-
-
 /*           
 loop:      
    PRINT(prompt)
