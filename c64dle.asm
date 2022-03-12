@@ -15,13 +15,11 @@ word:
 encoded_word:
    //.fill 4,0
    .byte $10, $e1, $6a, $81
-secret_word:
-   .fill 6,0
 prompt:
    .text "ENTER A 5 LETTER WORD: "
    .byte 0
 wait_prompt:                  
-   .text "PRESS ENTER TO GENERATE A WORD: "
+   .text "PRESS ENTER TO START GENERATING WORDS... "
    .byte 0
 
 invalid:
@@ -45,12 +43,15 @@ start: {
    lda #6                     //da ba dee da ba di
    sta 53280
 
-loop:      
+   lda #5
+   jsr KERNAL_CHROUT
+
    lda #$ff                   //get the sid noise channel running
    sta $d40e
    sta $d40f
    lda #$80
    sta $d412
+   
    PRINT(wait_prompt)         //wait for user
 !: jsr KERNAL_GETIN
    cmp #$0d
@@ -58,43 +59,17 @@ loop:
    lda $d41b                  //get random number
    sta rand.x                 //seed PRNG
 
-   mov #<1000:rand16_max._max_lo
-   mov #>1000:rand16_max._max_hi
-   m16 #rand16_max._max_mode_max:rand16_max._max_mode
-   jsr rand16_max
-   
-   clc
-   rol rand16_max._output
-   rol rand16_max._output+1
-   
-   clc
-   rol rand16_max._output
-   rol rand16_max._output+1
-
-   clc
-   lda rand16_max._output
-   adc #<dict
-   sta dict_ptr
-   lda rand16_max._output+1
-   adc #>dict
-   sta dict_ptr+1
-
-   ldx #3
-!: lda dict_ptr:dict,x
-   sta decode_word._input,x
-   dex
-   bpl !-
    m16 #word:decode_word._output
-   jsr decode_word
-
-   ldx #4
+   
+loop:
+   jsr random_word
    PRINT(word)
-   lda #$0d
+   lda #' '
    jsr KERNAL_CHROUT
-!: jsr KERNAL_GETIN
-   cmp #$0d
-   bne !-
+   jsr KERNAL_CHROUT
+   jsr KERNAL_CHROUT
    jmp loop
+
 
 /*           
 loop:      
@@ -149,6 +124,53 @@ print: {
 .macro PRINT(string) {
    m16 #string:print._string
    jsr print
+}
+
+
+/* random_word  Get random word
+   Parameters
+     decode_word._output
+       Address to store decoded word
+     _max_hi and _max_lo
+       High and low byte of highest index of word. Set to
+       higher numbers for less common words.
+   Returns  Random word in decode in decode_word._output
+   Mangles  A,X,Y
+*/
+random_word: {
+   lda _num_words_lo:#<1000   //choose a random number
+   sta rand16_max._max_lo
+   lda _num_words_hi:#>1000
+   sta rand16_max._max_hi
+   m16 #rand16_max._max_mode_max:rand16_max._max_mode
+   jsr rand16_max
+
+   lda rand16_max._output     //random number into dict_ptr
+   sta dict_ptr
+   lda rand16_max._output+1
+   sta dict_ptr+1
+
+   clc                        //dict_ptr *= 4
+   rol dict_ptr
+   rol dict_ptr+1
+   clc
+   rol dict_ptr
+   rol dict_ptr+1
+
+   clc                        //dict_ptr += dict
+   lda dict_ptr
+   adc #<dict
+   sta dict_ptr
+   lda dict_ptr+1
+   adc #>dict
+   sta dict_ptr+1
+
+   ldx #3                     //load 4 bytes into decode_word input
+!: lda dict_ptr:dict,x
+   sta decode_word._input,x
+   dex
+   bpl !-
+   jmp decode_word            //returns
 }
 
 

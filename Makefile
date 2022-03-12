@@ -7,6 +7,10 @@ C1541   ?= c1541
 
 all: c64dle.prg
 
+kernal.nomemtest: kernal
+	cp kernal kernal.nomemtest
+	echo "1d69: 9f" | xxd -r - kernal.nomemtest
+
 makedict: makedict.c
 	$(CC) $(CFLAGS) $< -o $@
 
@@ -31,7 +35,7 @@ clean:
 
 .phony: run
 run: c64dle.prg
-	$(X64) -autostartprgmode 1 c64dle.prg
+	$(X64) -kernal kernal.nomemtest -autostartprgmode 1 c64dle.prg
 
 .phony: debug
 debug: c64dle.prg
