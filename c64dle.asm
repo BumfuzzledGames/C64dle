@@ -11,13 +11,18 @@ BasicUpstart2(start)
 #import "macros.inc"
 #import "color.inc"
 
-.const COLOR=COLOR_WHITE
-.const MATCH_EXACT=COLOR_GREEN
-.const MATCH_INEXACT=COLOR_WHITE
-.const MATCH_NONE=COLOR_GREY
+.const BACKGROUND_COLOR=COLORRAM_BLACK
+.const BORDER_COLOR=COLORRAM_BLACK
+            
+.const MATCH_EXACT=COLORRAM_GREEN
+.const MATCH_INEXACT=COLORRAM_ORANGE
+.const MATCH_NONE=COLORRAM_GREY
 
+.const GAME_PHASES=6
+            
 guessed_word:
-   .fill 6,0
+   .text "WORDS"
+   .fill 1,0
 guessed_matches:          
    .fill 5,0
 secret_word:    
@@ -25,11 +30,26 @@ secret_word:
 secret_word_matches:
    .fill 5,0
 
+//screen stuff
+word_offsets:                 //offset in screen of each word row
+   .word scrpos(2,1)
+   .word scrpos(2,5)
+   .word scrpos(2,9)
+   .word scrpos(2,13)
+   .word scrpos(2,17)
+   .word scrpos(2,21)
+.const MESSAGE_BOX_OFFSET=scrpos(21,17)
+.const MESSAGE_BOX_LENGTH=15
+
+phase:                          //current phase of the game
+   .byte 0
+
+.encoding "screencode_upper"
 prompt:
    .text "ENTER A 5 LETTER WORD: "
    .byte 0
 wait_prompt:                  
-   .text "PRESS ENTER TO START GAME... "
+   .text "  PRESS ENTER  "
    .byte 0
 
 invalid:
@@ -45,22 +65,27 @@ buffer:
 
 start: {
    sei                        //disable BASIC ROM
-   lda $1
-   and #%11111110
+   lda $1                     //TODO: don't do this if program
+   and #%11111110             //doesn't overlap with BASIC
    sta $1
    cli
 
-   lda #6                     //da ba dee da ba di
-   sta 53280
-
-   lda #COLOR_WHITE
-   jsr KERNAL_CHROUT
 
    lda #$ff                   //get the sid noise channel running
    sta $d40e
    sta $d40f
    lda #$80
    sta $d412
+
+   jsr draw_wordle_screen
+   m16 #wait_prompt:display_message._input
+   jsr display_message
+   ldx #6
+!: jsr draw_word
+   inc phase
+   dex
+   bne !-
+   jmp *
    
    PRINT(wait_prompt)         //wait for user
 !: jsr KERNAL_GETIN
@@ -102,6 +127,134 @@ done:
    cli
 
    rts
+}
+
+
+draw_wordle_screen: {
+   lda #BACKGROUND_COLOR
+   sta 53281
+   lda #BORDER_COLOR
+   sta 53280
+
+   ldx #250
+!: lda wordle_screen_text,x
+   sta 1024,x
+   lda wordle_screen_text+250,x
+   sta 1024+250,x
+   lda wordle_screen_text+500,x
+   sta 1024+500,x
+   lda wordle_screen_text+750,x
+   sta 1024+750,x
+
+   lda wordle_screen_color,x
+   sta $D800,x
+   lda wordle_screen_color+250,x
+   sta $D800+250,x
+   lda wordle_screen_color+500,x
+   sta $D800+500,x
+   lda wordle_screen_color+750,x
+   sta $D800+750,x
+   
+   dex
+   cpx #$ff
+   bne !-
+   rts
+}
+
+
+//draw word of current phase
+draw_word: {
+   pha                  //A
+   txa                  //X
+   pha
+   tya                  //Y
+   pha
+
+   lda phase            //current phase*2
+   asl
+   tax
+   lda word_offsets,x
+   clc                  //add 41 to offset
+   adc #41
+   sta _screen_offset
+   lda word_offsets+1,x
+   adc #0
+   sta _screen_offset+1
+
+   ldx #0
+   ldy #0
+!: lda _input:guessed_word,x
+   sec                  //PETSCII to screen code
+   sbc #64              //assumes only letters in word
+   sta _screen_offset:$1024,y
+   clc
+   tya
+   adc #3
+   tay
+   inx
+   cpx #5
+   bne !-
+
+done:   
+   pla                  //Y
+   tay          
+   pla                  //X
+   tax                 
+   pla                  //A
+   rts
+}
+
+
+display_message: {
+   ldx #0
+!: lda _input:$ffff,x
+   beq done
+   clc
+   adc #128
+   sta MESSAGE_BOX_OFFSET,x
+   inx
+   jmp !-
+done:   
+   rts
+}
+
+
+clear_message: {
+   ldx #MESSAGE_BOX_LENGTH-1
+   lda #$20+128
+!: sta MESSAGE_BOX_OFFSET,x
+   dex
+   bpl !-
+   rts
+}
+
+
+//phase*4*40+41 + letter*4
+get_letter_bubble_offset: {
+   lda #41                    //41
+   sta _output
+   lda #0
+   sta _output+1
+   ldx _phase:#1
+!: clc
+   lda _output
+   adc #40*4                  //+y*40*4
+   sta _output
+   bcc !+
+   inc _output+1
+!: dex
+   bpl !--
+   lda _letter:#1             //x*4
+   asl
+   asl
+   clc
+   adc _output
+   sta _output
+   bcc !+
+   inc _output+1
+!: rts
+_output:                      
+   .word 0
 }
 
 
@@ -223,7 +376,7 @@ print_color_guess: {
    inx
    cpx #5
    bne !-
-   lda #COLOR
+//   lda #COLOR
    jsr KERNAL_CHROUT
 }
    
@@ -569,11 +722,11 @@ is_delete:
    bne is_full
    cpx #0                     //do nothing if at beginning
    beq loop
-   jsr echo_mode_read_char    //no fixed echo for delete
    dex                        //move tail back and store nul
    lda #0
    jsr store
    dex                        //move tail back again
+   jsr echo_mode_read_char    //no fixed echo for delete
    jmp loop
 is_full:         
    cpx _buffer_len            //is the buffer full?
@@ -610,9 +763,11 @@ alpha:
 }
 
 
-
+#import "gamescreen.asm"
+           
 dict:                           //dict is at end of program
 .import binary "dict.bin"
 dict_end:   
 .const DICT_NUM_WORDS=(dict_end-dict)/4-1
-            
+   
+program_end:                  

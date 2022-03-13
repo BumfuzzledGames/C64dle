@@ -10,3 +10,7 @@
   .if (arg.getType()==AT_IMMEDIATE) .return CmdArgument(arg.getType(),>arg.getValue())
   .return CmdArgument(arg.getType(),arg.getValue()+1)
 }
+
+.function scrpos(x,y) {
+  .return 1024+y*40+x
+}
