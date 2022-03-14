@@ -113,32 +113,15 @@ start: {
    lda #$80
    sta $d412
 
-   lda #<screen_wordle
-   sta $fb
-   lda #>screen_wordle
-   sta $fc
-   jsr draw_screen
-   DISPLAY(msg_prompt)
-   jmp * 
+   DRAW_SCREEN(screen_title)
 !: jsr KERNAL_GETIN
    cmp #$0d
    bne !-
-   lda $d41b   
-               //get random number
+   lda $d41b                  //get random number
    sta rand.x                 //seed PRNG
-   jmp play
 
 loop:
-   lda #<screen_wordle
-   sta $fb
-   lda #>screen_wordle
-   sta $fc
-   DISPLAY(msg_prompt)
-!: jsr KERNAL_GETIN
-   cmp #$0d
-   bne !-
-play:
-   DISPLAY(msg_empty)
+   DRAW_SCREEN(screen_wordle)
    jsr play_game
 !: jsr KERNAL_GETIN
    beq !-
@@ -169,6 +152,13 @@ done:
    Returns  nothing
    Mangles  A,X,Y,$fb-$fe
 */
+.macro DRAW_SCREEN(screen) {
+   lda #<screen
+   sta $fb
+   lda #>screen
+   sta $fc
+   jsr draw_screen
+}
 draw_screen: {
    ldy #0               //background and border color
    lda ($fb),y
@@ -932,6 +922,8 @@ alpha:
 
 screen_wordle:
 #import "screen_wordle.asm"
+screen_title:
+#import "screen_title.asm"
            
 dict:                           //dict is at end of program
 .import binary "dict.bin"
