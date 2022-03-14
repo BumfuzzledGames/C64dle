@@ -1,3 +1,3 @@
 C64dle - Wordle Clone for C64
 
-![screenshot](screenshot.jpg "Screenshot")
+![screenshot](screenshot.png "Screenshot")
