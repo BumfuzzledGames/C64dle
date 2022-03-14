@@ -38,26 +38,35 @@ word_offsets:                 //offset in screen of each word row
    .word scrpos(2,13)
    .word scrpos(2,17)
    .word scrpos(2,21)
+color_offsets:
+   .word clrpos(2,1)
+   .word clrpos(2,5)
+   .word clrpos(2,9)
+   .word clrpos(2,13)
+   .word clrpos(2,17)
+   .word clrpos(2,21)
 .const MESSAGE_BOX_OFFSET=scrpos(21,17)
 .const MESSAGE_BOX_LENGTH=15
 
 phase:                          //current phase of the game
    .byte 0
 
+//messages for the message box
 .encoding "screencode_upper"
-prompt:
-   .text "ENTER A 5 LETTER WORD: "
-   .byte 0
-wait_prompt:                  
+msg_prompt:                  
    .text "  PRESS ENTER  "
-   .byte 0
-
-invalid:
-   .text "IN"
-valid:
-   .text "VALID"
-   .byte $0d,0
-
+msg_checking:
+   .text "  CHECKING...  "
+msg_empty:
+   .text "               "
+msg_invalid:
+   .text " INVALID  WORD "
+msg_won:
+   .text "    YOU WON!   "
+msg_lost:
+   .text " IT WAS XXXXX  "
+.const MSG_LOST_WORD=msg_lost+8
+.encoding "ascii"
 
 buffer:
     .fill 6,0
@@ -78,24 +87,27 @@ start: {
    sta $d412
 
    jsr draw_wordle_screen
-   m16 #wait_prompt:display_message._input
-   jsr display_message
-   ldx #6
-!: jsr draw_word
-   inc phase
-   dex
-   bne !-
-   jmp *
-   
-   PRINT(wait_prompt)         //wait for user
+   DISPLAY(msg_prompt)
 !: jsr KERNAL_GETIN
    cmp #$0d
    bne !-
    lda $d41b                  //get random number
    sta rand.x                 //seed PRNG
+   jmp play
 
 loop:
+   jsr draw_wordle_screen
+   DISPLAY(msg_prompt)
+!: jsr KERNAL_GETIN
+   cmp #$0d
+   bne !-
+play:
+   DISPLAY(msg_empty)
    jsr play_game
+!: jsr KERNAL_GETIN
+   beq !-
+   cmp #$0d
+   bne !-
    jmp loop
 
 
@@ -162,6 +174,27 @@ draw_wordle_screen: {
 }
 
 
+//draw secret word at top of screen for debugging
+debug_draw_secret_word: {
+   pha                  //A
+   txa                  //X
+   pha
+
+   ldx #4
+!: lda secret_word,x
+   sec
+   sbc #64
+   sta 1024,x
+   dex
+   bpl !-
+
+   pla                  //X
+   tax                 
+   pla                  //A
+   rts
+}
+
+
 //draw word of current phase
 draw_word: {
    pha                  //A
@@ -183,17 +216,21 @@ draw_word: {
 
    ldx #0
    ldy #0
-!: lda _input:guessed_word,x
-   sec                  //PETSCII to screen code
+loop:
+   lda _input:guessed_word,x
+   bne !+
+   lda #' '
+   jmp !++
+!: sec                  //PETSCII to screen code
    sbc #64              //assumes only letters in word
-   sta _screen_offset:$1024,y
+!: sta _screen_offset:$1024,y
    clc
    tya
    adc #3
    tay
    inx
    cpx #5
-   bne !-
+   bne loop
 
 done:   
    pla                  //Y
@@ -205,16 +242,18 @@ done:
 }
 
 
+.macro DISPLAY(string) {
+   m16 #string:display_message._string
+   jsr display_message
+}
 display_message: {
-   ldx #0
-!: lda _input:$ffff,x
-   beq done
-   clc
+   ldx #MESSAGE_BOX_LENGTH-1
+!: lda _string:$ffff,x
+   clc                  //reverse
    adc #128
    sta MESSAGE_BOX_OFFSET,x
-   inx
-   jmp !-
-done:   
+   dex
+   bpl !-
    rts
 }
 
@@ -259,15 +298,22 @@ _output:
 
 
 play_game:{
+   //jsr draw_wordle_screen
+   lda #0                     //reset phase
+   sta phase
+   
    m16 #secret_word:decode_word._output
    jsr random_word            //pick secret word
 
-   //PRINT(secret_word)         //print for debug
-   lda #$0d
-   jsr KERNAL_CHROUT
+   ldx #4
+   lda #0
+!: sta guessed_word,x
+   dex
+   bpl !-
 
-main_loop:         
-   PRINT(prompt)              //get word from user
+   //jsr debug_draw_secret_word
+main_loop:
+   m16 #draw_word:read_string._chrout
    mov #0:read_string._idx
    mov #5:read_string._buffer_len
    m16 #guessed_word:read_string._buffer
@@ -275,26 +321,18 @@ main_loop:
 get_guess: {         
    jsr read_string
 
-   //check if word is valid
-   PRINT(str_checking)
    m16 #guessed_word:is_valid._input
+   DISPLAY(msg_checking)
    jsr is_valid
-   php
-   PRINT(str_checking_erase)
-   plp
    bcc clear_matches
    //TODO Make a sound or something
+   DISPLAY(msg_invalid)
    mov #5:read_string._idx
    jmp get_guess
-str_checking:
-   .text " ..."
-   .byte 0
-str_checking_erase:
-   .fill *-str_checking-1,$14
-   .byte 0
 }
 
 clear_matches: {
+   DISPLAY(msg_empty)
    ldx #4
 loop:              
    lda #MATCH_NONE
@@ -307,7 +345,6 @@ loop:
    
 find_exact_matches: {
    ldx #4                     //idx
-   ldy #0                     //match counter
 loop:                   
    lda guessed_word,x
    cmp secret_word,x
@@ -316,20 +353,8 @@ loop:
    sta guessed_matches,x
    lda #1
    sta secret_word_matches,x
-   iny
 !: dex
    bpl loop
-}
-   
-did_player_win: {
-   cpy #5
-   bne find_inexact_matches
-   PRINT(str_won)
-   rts
-str_won:
-   .byte $0d
-   .text "YOU GOT IT!!!!"
-   .byte $0d, $00
 }
    
 find_inexact_matches: {
@@ -358,33 +383,93 @@ next_guess_letter:
    bpl loop
 }
    
-erase_word: {
-   ldx #5
-   lda #$14
-!: jsr KERNAL_CHROUT
-   dex
-   bne !-
-}
+//print word with colors
+color_guess: {
+   lda phase            //phase*2
+   asl
+   tax
+   lda color_offsets,x
+   sta row_offset
+   lda color_offsets+1,x
+   adc #0
+   sta row_offset+1
    
-   //print word with colors
-print_color_guess: {
-   ldx #0
-!: lda guessed_matches,x
-   jsr KERNAL_CHROUT
-   lda guessed_word,x
-   jsr KERNAL_CHROUT
+   ldy #2               //3 screen rows
+row:
+   ldx #0               //5 letters
+letter:
+   tya                  //preserve y
+   pha
+   lda guessed_matches,x
+   ldy #2               //3 columns
+!: sta row_offset:$1024,y
+   dey
+   bpl !-
+   pla                  //restore y
+   tay
+   lda row_offset       //next 3 columns
+   clc
+   adc #3
+   sta row_offset
+   lda row_offset+1
+   adc #0
+   sta row_offset+1
    inx
    cpx #5
-   bne !-
-//   lda #COLOR
-   jsr KERNAL_CHROUT
+   bne letter
+   lda row_offset       //go to next row
+   clc
+   adc #25
+   sta row_offset
+   lda row_offset+1
+   adc #0
+   sta row_offset+1
+   dey
+   bpl row
 }
    
+did_player_win: {
+   ldx #4
+   ldy #0
+loop:
+   lda guessed_matches,x
+   cmp #MATCH_EXACT
+   bne !+
+   iny
+!: dex
+   bpl loop
+   cpy #5
+   bne no_win
+   DISPLAY(msg_won)
+   rts
+no_win:
+}
+
    //loop
-   lda #$0d
-   jsr KERNAL_CHROUT
+   inc phase
+   lda phase
+   cmp #6
+   beq lose
+   
+   ldx #4               //clear guessed word
+   lda #0
+!: sta guessed_word,x
+   dex
+   bpl !-
+
    mov #0:read_string._idx
    jmp main_loop
+
+lose:
+   ldx #4               //5 letters
+!: lda secret_word,x
+   sec
+   sbc #64
+   sta MSG_LOST_WORD,x
+   dex
+   bpl !-
+   DISPLAY(msg_lost)
+   rts
 }
 
 
@@ -755,7 +840,7 @@ force_store:
 echo:
 echo_mode_fixed_char:         
    lda _echo_char:#'*'
-echo_mode_read_char:          
+echo_mode_read_char:
    jsr _chrout:KERNAL_CHROUT
    rts
 alpha:

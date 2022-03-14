@@ -14,3 +14,6 @@
 .function scrpos(x,y) {
   .return 1024+y*40+x
 }
+.function clrpos(x,y) {
+  .return $d800+y*40+x
+}
