@@ -18,7 +18,7 @@ dictns.txt: frequency.txt scrabble.txt
 dict.bin: makedict dictns.txt
 	./makedict dictns.txt dict.bin
 
-c64dle.prg: c64dle.asm dict.bin gamescreen.asm kernal.inc macros.inc color.inc
+c64dle.prg: c64dle.asm dict.bin screen_wordle.asm kernal.inc macros.inc color.inc
 	$(KICKASS) -vicesymbols -debugdump c64dle.asm c64dle.prg
 
 c64dle.d64: c64dle.prg

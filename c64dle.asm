@@ -113,8 +113,13 @@ start: {
    lda #$80
    sta $d412
 
-   jsr draw_wordle_screen
+   lda #<screen_wordle
+   sta $fb
+   lda #>screen_wordle
+   sta $fc
+   jsr draw_screen
    DISPLAY(msg_prompt)
+   jmp * 
 !: jsr KERNAL_GETIN
    cmp #$0d
    bne !-
@@ -124,7 +129,10 @@ start: {
    jmp play
 
 loop:
-   jsr draw_wordle_screen
+   lda #<screen_wordle
+   sta $fb
+   lda #>screen_wordle
+   sta $fc
    DISPLAY(msg_prompt)
 !: jsr KERNAL_GETIN
    cmp #$0d
@@ -138,27 +146,6 @@ play:
    bne !-
    jmp loop
 
-
-/*           
-loop:      
-   PRINT(prompt)
-   mov #5:read_string._buffer_len
-   m16 #buffer:read_string._buffer
-   jsr read_string
-   lda #' '                   //print newline
-   ldx #3
-!: jsr KERNAL_CHROUT
-   dex
-   bpl !-
-
-   m16 #invalid:print._string
-   jsr is_valid
-   bcs !+
-   m16 #valid:print._string
-!: jsr print
-   jmp loop
-*/
-
 done:      
    sei                        //enable BASIC ROM
    lda $1
@@ -170,35 +157,69 @@ done:
 }
 
 
-draw_wordle_screen: {
-   lda #BACKGROUND_COLOR
+/* draw_screen  Draw a screen to screen
+   Parameters
+     $fb,$fc
+       Address of screen to draw. This is in the
+       format of:
+         background_color   1 byte
+         border_color       1 byte
+         characters         1000 bytes
+         colors             1000 bytes
+   Returns  nothing
+   Mangles  A,X,Y,$fb-$fe
+*/
+draw_screen: {
+   ldy #0               //background and border color
+   lda ($fb),y
    sta 53281
-   lda #BORDER_COLOR
+   iny
+   lda ($fb),y
    sta 53280
-
-   ldx #250
-!: lda wordle_screen_text,x
-   sta 1024,x
-   lda wordle_screen_text+250,x
-   sta 1024+250,x
-   lda wordle_screen_text+500,x
-   sta 1024+500,x
-   lda wordle_screen_text+750,x
-   sta 1024+750,x
-
-   lda wordle_screen_color,x
-   sta $D800,x
-   lda wordle_screen_color+250,x
-   sta $D800+250,x
-   lda wordle_screen_color+500,x
-   sta $D800+500,x
-   lda wordle_screen_color+750,x
-   sta $D800+750,x
-   
-   dex
-   cpx #$ff
-   bne !-
+   lda $fb              //skip color bytes
+   clc
+   adc #2
+   sta $fb
+   bcc !+
+   inc $fc
+!: lda #<1024           //copy to screen
+   sta $fd
+   lda #>1024
+   sta $fe
+   jsr copy
+   lda #<$D800          //copy to color RAM
+   sta $fd
+   lda #>$D800
+   sta $fe
+   jsr copy
    rts
+
+copy: {
+   ldx #4               //copy 4 blocks of 250
+loopx:
+   ldy #0
+loopy:
+   lda ($fb),y
+   sta ($fd),y
+   iny
+   cpy #250
+   bne loopy
+   lda $fb              //next 250 chunk on input
+   clc
+   adc #250
+   sta $fb
+   bcc !+
+   inc $fc
+!: lda $fd              //next 250 chunk on output
+   clc
+   adc #250
+   sta $fd
+   bcc !+
+   inc $fe
+!: dex                  //4 blocks
+   bne loopx
+   rts
+}
 }
 
 
@@ -909,7 +930,8 @@ alpha:
 }
 
 
-#import "gamescreen.asm"
+screen_wordle:
+#import "screen_wordle.asm"
            
 dict:                           //dict is at end of program
 .import binary "dict.bin"
