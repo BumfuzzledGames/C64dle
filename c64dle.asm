@@ -15,8 +15,8 @@ BasicUpstart2(start)
 .const BORDER_COLOR=COLORRAM_BLACK
             
 .const MATCH_EXACT=COLORRAM_GREEN
-.const MATCH_INEXACT=COLORRAM_ORANGE
-.const MATCH_NONE=COLORRAM_GREY
+.const MATCH_INEXACT=COLORRAM_YELLOW
+.const MATCH_NONE=COLORRAM_DARK_GREY
 
 .const GAME_PHASES=6
             
@@ -45,6 +45,33 @@ color_offsets:
    .word clrpos(2,13)
    .word clrpos(2,17)
    .word clrpos(2,21)
+keyboard_offsets:
+   .word clrpos(20,11)          //A
+   .word clrpos(29,13)          //B
+   .word clrpos(25,13)          //C
+   .word clrpos(24,11)          //D
+   .word clrpos(23, 9)          //E
+   .word clrpos(26,11)          //F
+   .word clrpos(28,11)          //G
+   .word clrpos(30,11)          //H
+   .word clrpos(33, 9)          //I
+   .word clrpos(32,11)          //J
+   .word clrpos(34,11)          //K
+   .word clrpos(36,11)          //L
+   .word clrpos(33,13)          //M
+   .word clrpos(31,13)          //N
+   .word clrpos(35, 9)          //O
+   .word clrpos(37, 9)          //P
+   .word clrpos(19, 9)          //Q
+   .word clrpos(25, 9)          //R
+   .word clrpos(22,11)          //S
+   .word clrpos(27, 9)          //T
+   .word clrpos(31, 9)          //U
+   .word clrpos(27,13)          //V
+   .word clrpos(21, 9)          //W
+   .word clrpos(23,13)          //X
+   .word clrpos(29, 9)          //Y
+   .word clrpos(21, 9)          //Z
 .const MESSAGE_BOX_OFFSET=scrpos(21,17)
 .const MESSAGE_BOX_LENGTH=15
 
@@ -91,7 +118,8 @@ start: {
 !: jsr KERNAL_GETIN
    cmp #$0d
    bne !-
-   lda $d41b                  //get random number
+   lda $d41b   
+               //get random number
    sta rand.x                 //seed PRNG
    jmp play
 
@@ -426,6 +454,39 @@ letter:
    sta row_offset+1
    dey
    bpl row
+}
+
+color_keyboard: {
+   ldx #4               //5 letters
+loop:
+   //store keyboard offset in $fd
+   lda guessed_word,x
+   sec
+   sbc #'A'
+   asl
+   tay
+   lsr
+   lda keyboard_offsets,y
+   sta $fd
+   lda keyboard_offsets+1,y
+   sta $fe
+   ldy #0
+   lda #MATCH_EXACT     //don't overwrite EXACT
+   cmp ($fd),y
+   beq loop_end
+   lda #MATCH_INEXACT   //overwrite INEXACT with EXACT
+   cmp ($fd),y
+   bne !+
+   lda guessed_matches,x
+   cmp #MATCH_EXACT
+   bne !+
+   jmp store_color
+!: lda guessed_matches,x
+store_color:            
+   sta ($fd),y
+loop_end:               
+   dex
+   bpl loop
 }
    
 did_player_win: {
